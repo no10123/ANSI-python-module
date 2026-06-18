@@ -2,6 +2,9 @@
 a python module focused on creating better gui within the terminal
 
 credits:
+
 built by me
-used https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797 a lot
+
+used (ANSI Escape Sequences)[https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797] a lot (ALSO is main source)
+
 built for stardance
