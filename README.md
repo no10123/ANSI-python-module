@@ -1,5 +1,14 @@
 # ANSI based python module
 a python module focused on creating better gui within the terminal
+is cross terminal! 
+
+
+
+
+
+stuf for nerds:
+nt - terminal type (windows)
+
 
 credits:
 
