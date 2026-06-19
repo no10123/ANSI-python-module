@@ -450,9 +450,46 @@ def Demo256():
             print(end="\t")
         print(end=" " if i < 15 else "")
 
+def clock_tick():
+    """saves cursor pos, and does time"""
+    current_time = time.strftime("%H:%M:%S")
+    sys.stdout.write(f"\x1b[s\x1b[1;60H\x1b[33m[ Time: {current_time} ]\x1b[0m\x1b[u")
+    sys.stdout.flush()
+
+def draw_interface():
+    """interface for buttons demo"""
+    sys.stdout.write("\x1b[2J\x1b[H")
+    sys.stdout.write("====================================================\n")
+    sys.stdout.write("             FANCY INPUT INTERACTIVE DEMO           \n")
+    sys.stdout.write("====================================================\n\n")
+    
+    # buttons
+    sys.stdout.write("    \x1b[44m[ CLEAR ]\x1b[0m    \x1b[41m[ QUIT ]\x1b[0m\n\n")
+    sys.stdout.write("click a button:\n")
+    sys.stdout.flush()
+
+def buttonsDemo():
+    draw_interface()
+    while True:
+        response = finput(prompt="User> ", tick_func=clock_tick)
+        if response[0:2] == ("m","LC"):
+            x, y = response[3:1]
+            if y == 5:
+                if 5 <= x <= 13:
+                    draw_interface()
+                    print("\n\x1b[32mcleared!\x1b[0m")
+                elif 18 <= x <= 24:
+                    print("\n\x1b[31mbye, bye!\x1b[0m")
+                    break
+            else:
+                print(f"\nclicked bg at x : {x}, y : {y}")
+        else:
+            if response.strip().lower() == 'quit':
+                break
+            print(f"\nResponce: {response}")
 
 def main():
-    pass    
+    buttonsDemo()    
 
 if __name__ == "__main__":
-    aimGameDemo()
+    buttonsDemo()
