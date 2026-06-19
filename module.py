@@ -70,11 +70,9 @@ def clear(n=""):
     os.system("cls" if os.name == "nt" else "clear")
     return n
 
-def leadZero (i, d):
+def leadZero (i:int, d:int) -> str:
     """number, digits. (1,3) -> '001'"""
-    i = str(i)
-    i = "0" * (d - len(i)) + i
-    return i
+    return "0" * (d - len(str(i))) + str(i)
 
 def rgb(r,g,b,m="f"):
     """0 to 255 for each color, foreground/background"""
@@ -82,37 +80,37 @@ def rgb(r,g,b,m="f"):
 
 class cursor:
     """invis() and vis() may not cetain terminals."""
-    def invis():
+    def invis(self):
         return ("\033[?25l")
-    def vis():
+    def vis(self):
         return ("\033[?25h")
-    def up(n=1):
+    def up(self, n=1):
         return (f"\033[{n}A")
-    def down(n=1):
+    def down(self, n=1):
         return (f"\033[{n}B")
-    def left(n=1):
+    def left(self, n=1):
         return (f"\033[{n}D")
-    def right(n=1):
+    def right(self, n=1):
         return (f"\033[{n}C")
-    def nextLine(n=1):
+    def nextLine(self, n=1):
         return (f"\033[{n}E")
-    def prevLine(n=1):
+    def prevLine(self, n=1):
         return (f"\033[{n}F")
-    def collum(n):
+    def collum(self, n):
         return (f"\033[{n}G")
-    def getPos():
+    def getPos(self):
         return ("\033[6n")
-    def up1():
+    def up1(self):
         return ("\033 M")
-    def setPos(x="",y=""):
+    def setPos(self, x="",y=""):
         return (f"\033[{y};{x}H")
-    def savePos():
+    def savePos(self):
         return ("\033[s")
-    def loadPos():
+    def loadPos(self):
         return ("\033[u")
-    def saveAll():
+    def saveAll(self):
         return ("\0337")
-    def loadAll():
+    def loadAll(self):
         return ("\0338")
 
 chars = {
@@ -174,7 +172,6 @@ class graphics:
         "hidden"        : "\033[28m",
         "strikethrough" : "\033[29m"}
 
-
 def color(name="default", m="f", bright=False):
     """name, foreground/background (f,b), bright (true/false)"""
     names = ["black","red","green","yellow","blue","magenta","cyan","white",None,"default"]
@@ -235,7 +232,7 @@ def char_available():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
         return bool(dr)
 
-def finput(prompt="", max_length=-1, tick_func=lambda: 0, long=False):
+def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis=True):
     """Fancy input, input that allows mouse inputs."""
     sys.stdout.write(prompt)
     sys.stdout.write(ENABLE_MOUSE)
@@ -244,11 +241,13 @@ def finput(prompt="", max_length=-1, tick_func=lambda: 0, long=False):
     user_input = ""
     buffer = ""
     mouse_regex = re.compile(r'\x1b\[<(\d+);(\d+);(\d+)([mM])')
+    hide  = "\033[8m" if not vis else ""
+    reset = "\033[28m" if not vis else ""
 
     try:
         while True:
             # a tick so you don't need to use threading
-            tick_func()
+            exec(tick_func)
             time.sleep(0.01)
             # check if theirs an input, if so read it.
             if not char_available():
@@ -292,24 +291,24 @@ def finput(prompt="", max_length=-1, tick_func=lambda: 0, long=False):
 
             # normie text
             if char in ('\n', '\r'):
-                sys.stdout.write('\n')
+                sys.stdout.write(hide + '\n' + reset)
                 sys.stdout.flush()
                 return user_input
                 
             elif char in ('\x08', '\x7f'): # backspace
                 if len(user_input) > 0:
                     user_input = user_input[:-1]
-                    sys.stdout.write('\b \b')
+                    sys.stdout.write(hide + '\b \b' + reset)
                     sys.stdout.flush()
                     
             elif char.isprintable():
                 user_input += char
-                sys.stdout.write(char)
+                sys.stdout.write(hide + char + reset)
                 sys.stdout.flush()
                 
                 # auto submit feuture
                 if max_length != -1 and len(user_input) >= max_length:
-                    sys.stdout.write('\n')
+                    sys.stdout.write(hide + '\n' + reset)
                     sys.stdout.flush()
                     time.sleep(0.5)
                     return user_input
@@ -318,14 +317,14 @@ def finput(prompt="", max_length=-1, tick_func=lambda: 0, long=False):
         sys.stdout.flush()
 
 
-def clock_tick(x,y):
+def clock_tick(x,y,c:str="\033[39m"):
     """Draws the time"""
-    current_time = time.strftime("%H:%M:%S")
-    sys.stdout.write(f"\x1b[s\x1b[{y};{x}H\x1b[33m[ Time: {current_time} ]\x1b[0m\x1b[u")
-    sys.stdout.flush()
+    place(int(x),int(y),c + f"[{time.strftime('%H:%M:%S')}]" + "\033[0m",cls=True)
 
-def place(x,y,msg):
-    pass
+def place(x:int,y:int,msg:str,cls:bool=False):
+    if cls: sys.stdout.write(CLEAR_SCREEN)
+    sys.stdout.write(f"\x1b[{y};{x}H\x1b[K{msg}")
+    sys.stdout.flush()
 
 # DEMOS
 
@@ -470,7 +469,7 @@ def clickDemo():
             if isinstance(response, tuple):
                 action_char, btn_name, x, y = response
                 action = "Pressed" if action_char == 'M' else "Released"
-                sys.stdout.write(f"\x1b[{y};{x}H\x1b[K[{btn_name} {action} at X:{x} Y:{y}]")
+                place(int(x),int(y), f"[{btn_name} {action} at X:{x} Y:{y}]")
                 sys.stdout.flush()
             else:
                 if response.strip().lower() == 'q':
@@ -481,23 +480,23 @@ def clockDemo():
     sys.stdout.write(CLEAR_SCREEN)
     sys.stdout.flush()
     print("Click anywhere.")
-    print("Type 'q' to exit.\n")
+    print("Type 'q' to exit.\n" + cursor().invis())
+    lx, ly = False, False
 
     with RawTerminal():
         while True:
-            response = finput(prompt="> ", max_length=1)
+            response = finput(max_length=1,vis=False,tick_func=f'clock_tick({lx},{ly},"\033[33m")' if lx and ly else 'pass')
             if isinstance(response, tuple):
                 action_char, btn_name, x, y = response
-                action = "Pressed" if action_char == 'M' else "Released"
-                sys.stdout.write(f"\x1b[{y};{x}H\x1b[K[{btn_name} {action} at X:{x} Y:{y}]")
-                sys.stdout.flush()
+                place(int(x),int(y),f"[{time.strftime('%H:%M:%S')}]",cls=True)
+                lx, ly = x,y
             else:
                 if response.strip().lower() == 'q':
-                    print("\nExiting click demo...")
+                    print("\033[28m\nExiting click demo...")
                     break
 
 def main():
     pass
 
 if __name__ == "__main__":
-    tableDemo()
+    clockDemo()
