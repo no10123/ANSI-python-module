@@ -9,6 +9,7 @@ import subprocess
 import hid
 import pyperclip
 import serial.tools.list_ports
+import shutil
 
 class RawTerminal():
     def __init__(self):
@@ -68,6 +69,7 @@ class RawTerminal():
 ENABLE_MOUSE = "\x1b[?1000h\x1b[?1006h"
 DISABLE_MOUSE = "\x1b[?1000l\x1b[?1006l"
 CLEAR_SCREEN = "\033[H\033[J"
+DoubleX = True
 
 Debug = False
 
@@ -121,6 +123,7 @@ class cursor:
         return ("\0337")
     def loadAll(self):
         return ("\0338")
+c = cursor()
 
 chars = {
     #custom chars
@@ -217,6 +220,10 @@ def setMode(id, m="add"):
     1049 - alternative buffer
     """
     return f"\033[{'=' if id != 1049 else '?'}{id}{'h' if m.lower()[0] == 'a' else 'l'}"
+
+def divider(char="-"):
+    terminal_width = shutil.get_terminal_size(fallback=(80, 24)).columns
+    print(char * terminal_width)
 
 
 #useful fancy stuff
@@ -403,11 +410,13 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                         else: btn_name = "Unknown"
 
                         result["mouse"] = (action, btn_name,t_col,t_row) # (m/M) (name) (y) (x)
+                        return result
                 elif buffer.startswith('\x1b[') and "arrows" in inputs:
                     if len(buffer) == 3 and buffer[2] in ('A', 'B', 'C', 'D'):
                         direction = {'A': 'UP', 'B': 'DOWN', 'C': 'RIGHT', 'D': 'LEFT'}[buffer[2]]
                         buffer = ""
                         result["arrows"] = direction
+                        return result
                     if char.isalpha() and char not in ('A', 'B', 'C', 'D'): 
                         buffer = ""
                 # other stuff
@@ -427,11 +436,13 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
 
             # normie text
             if "keyboard" not in inputs:
-                result["keyboard"] = ""
+                continue
+
             if char in ('\n', '\r'):
                 sys.stdout.write(hide + '\n' + reset)
                 sys.stdout.flush()
                 result["keyboard"] = user_input
+                return result
                 
             elif char in ('\x08', '\x7f'): # backspace
                 if len(user_input) > 0:
@@ -451,7 +462,6 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                     time.sleep(0.5)
                     result["keyboard"] = user_input
 
-            return result
     
     finally:
         sys.stdout.write(DISABLE_MOUSE)
@@ -462,10 +472,87 @@ def clock_tick(x,y,c:str="\033[39m"):
     """Draws the time"""
     place(int(x),int(y),c + f"[{time.strftime('%H:%M:%S')}]" + "\033[0m",cls=True)
 
-def place(x:int,y:int,msg:str,cls:bool=False):
+def place(x:int,y:int,msg:str,cls:bool=False,save:bool=False):
     if cls: sys.stdout.write(CLEAR_SCREEN)
+    if save: sys.stdout.write(c.savePos())
     sys.stdout.write(f"\x1b[{y};{x}H\x1b[K{msg}")
+    if save: sys.stdout.write(c.loadPos())
     sys.stdout.flush()
+
+# more ansi stuff:
+class Canvas:
+    def __init__(self,D=False):
+        self.width, self.height = shutil.get_terminal_size()
+        if D:
+            if input(f"Canvas size initialized: {self.width}x{self.height}\nok: ") in ["overide","o"]:
+                self.width, self.height = int(input("width: ")), int(input("height: "))
+        self.buffer = [[" " for _ in range(self.width)] for _ in range(self.height)]
+        self.colors = [["\033[0m" for _ in range(self.width)] for _ in range(self.height)]
+
+    def set_pixel(self, x, y, char, color="\033[0m"):
+        if DoubleX:
+            x *= 2
+        if 0 <= x < self.width and 0 <= y < self.height:
+            self.buffer[y][x] = char
+            self.colors[y][x] = color
+            if DoubleX:
+                self.buffer[y][x + 1] = char
+                self.colors[y][x + 1] = color
+
+    def line(self, x1, y1, x2, y2, char="#", color="\033[0m"):
+        """Bresenham's Line Algo"""
+        dx = abs(x2 - x1)
+        dy = -abs(y2 - y1)
+        sx = 1 if x1 < x2 else -1
+        sy = 1 if y1 < y2 else -1
+        err = dx + dy
+
+        while True:
+            self.set_pixel(x1, y1, char, color)
+            if x1 == x2 and y1 == y2: break
+            e2 = 2 * err
+            if e2 >= dy:
+                err += dy
+                x1 += sx
+            if e2 <= dx:
+                err += dx
+                y1 += sy
+
+    def rect(self, x, y, w, h, char="#", color="\033[0m"):
+        for i in range(w):
+            self.set_pixel(x + i, y, char, color)
+            self.set_pixel(x + i, y + h - 1, char, color)
+        for i in range(h):
+            self.set_pixel(x, y + i, char, color)
+            self.set_pixel(x + w - 1, y + i, char, color)
+
+    def circle(self, x, y, R, char="#",  color="\033[0m"):
+        for i in range(2 * R):
+            i += x - R
+            for j in range(2 * R):
+                j += y - R
+                if (i - x)**2 + (j - y)**2 <= R:
+                    self.set_pixel(i,j,char,color)
+
+    def draw(self, L, char=" ", Color={"any":color("default")}):
+        for y, row in enumerate(L):
+            for x, Char in enumerate(row):
+                color_code = Color.get(Char, Color.get("any", "\033[0m"))
+                self.set_pixel(x, y, char, color_code)
+                
+    
+    def render(self):
+        """renders the stuff"""
+        output = []
+        output.append("\033[H") 
+        for y in range(self.height - 1):
+            for x in range(self.width):
+                output.append(f"{self.colors[y][x]}{self.buffer[y][x]}")
+        sys.stdout.write("".join(output))
+        sys.stdout.flush()
+
+
+C = Canvas()
 
 # DEMOS
 
@@ -665,32 +752,70 @@ def controllerDemo():
 def DebugDemo():
     while input("") != "q" : pass
 
-def main():
-    print("Searching for controller interfaces...")
-    all_devices = hid.enumerate()
-    
-    # Filter only for your controller
-    my_interfaces = [d for d in all_devices if d['vendor_id'] == TARGET_VID and d['product_id'] == TARGET_PID]
-    
-    if not my_interfaces:
-        print("Controller not found. Check your connections.")
-        return
+def canvasDemo():
+    C.line(1, 2, 60, 15, char="*", color=rgb(255, 0, 0)) # Red line
+    C.rect(10, 5, 20, 10, char="o", color=rgb(0, 255, 0)) # Green box
+    C.circle(5,6,10)
+    C.render()
 
-    print(f"Found {len(my_interfaces)} interfaces. Starting listeners...")
+def platformerDemo():
+    level = ["1" * 12] + ["1" + "0" * 10 + "1"] * 10 + ["1" * 12]
+    level[10] = "1" + "2" + "0" * 9 + "1"
 
-    # Start a thread for every interface found
-    threads = []
-    for dev in my_interfaces:
-        t = threading.Thread(target=listen, args=(dev,), daemon=True)
-        t.start()
-        threads.append(t)
+def randDemo():
+    rand = []
+    P = 10
+    Colors = dict(zip(list(str(i) for i in (range(P + 1))),list(color256(random.randint(16,231),"b") for _ in range(P + 1))))
+    for i in range(500):
+        rl = []
+        for j in range(50):
+            rl.append(str(random.randint(1,P)))
+        rand.append(rl)
+    C.draw(rand, Color=Colors)
+    C.render()
 
-    # Keep main thread alive
-    try:
+def arrowsDemo():
+    sys.stdout.write(CLEAR_SCREEN)
+    sys.stdout.flush()
+    print("Arrow Key Demo: Press arrow keys on your keyboard.")
+    print("Type 'esc' on your keyboard to exit.\n" + cursor().vis())
+
+    with RawTerminal():
         while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Exiting...")
+            response = finput(max_length=1, vis=True, inputs=["keyboard", "arrows", "ESC", "mouse"])
+            if "ESC" in response:
+                break
+
+            if "keyboard" in response:
+                pass
+            
+            elif "arrows" in response:
+                value = response["arrows"].lower()
+                move_sequence = getattr(c, value)()
+                sys.stdout.write(move_sequence)
+                sys.stdout.flush()
+            
+            if "mouse" in response:
+                if "mouse" in response:
+                    action_char, btn_name, x, y = response["mouse"]
+                    if action_char == "M":
+                        if btn_name == "LC":
+                            sys.stdout.write(c.setPos(x,y))
+                            sys.stdout.flush()
+                        elif btn_name == "MC":
+                            place(x=int(x),y=int(y),msg=" ",save=True)
+                
+    print(CLEAR_SCREEN)
+
+import flipper
+def main():
+    flipper.start()
+    if flipper.port:
+        flipper.cli(flipper.port)
+
 
 if __name__ == "__main__":
-    main()
+    clear()
+    for i in range(20):
+        divider(" ")
+    arrowsDemo()
