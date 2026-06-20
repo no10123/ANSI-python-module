@@ -3,6 +3,13 @@ import os
 import random
 import time
 import re
+import threading
+from inputs import get_gamepad, UnpluggedError
+import subprocess
+import hid
+import pyperclip
+import serial.tools.list_ports
+
 class RawTerminal():
     def __init__(self):
         self.original_stdin_state = None
@@ -62,6 +69,8 @@ ENABLE_MOUSE = "\x1b[?1000h\x1b[?1006h"
 DISABLE_MOUSE = "\x1b[?1000l\x1b[?1006l"
 CLEAR_SCREEN = "\033[H\033[J"
 
+Debug = False
+
 bg_color = ""
 
 
@@ -114,7 +123,7 @@ class cursor:
         return ("\0338")
 
 chars = {
-    """custom chars"""
+    #custom chars
     "BEL" : "\a",    # terminal bell
     "BS"  : "\b",    # backspace
     "HT"  : "\t",    # horizontal tab
@@ -128,26 +137,26 @@ chars = {
 
 class screen:
     class erase:
-        def CtoEnd():
+        def CtoEnd(self):
             return "\033[0J"
-        def CtoStart():
+        def CtoStart(self):
             return "\033[1J"
-        def all():
+        def all(self):
             return "\033[2J"
-        def saved():
+        def saved(self):
             return "\033[3J"
-    def save():
+    def save(self):
         return "\033[?47h"
-    def load():
+    def load(self):
         return "\033[?47l"
 
 class line:
     class erase:
-        def CtoEnd():
+        def CtoEnd(self):
             return "\033[0K"
-        def CtoStart():
+        def CtoStart(self):
             return "\033[1K"
-        def all():
+        def all(self):
             return "\033[2K"
 
 class graphics:
@@ -212,6 +221,75 @@ def setMode(id, m="add"):
 
 #useful fancy stuff
 
+#non standered inputs
+# fancy stuff
+TARGET_VID = 0x1A2C
+TARGET_PID = 0x4DBC
+
+def lsDevices():
+    devices = hid.enumerate()
+    device_list = []
+    
+    for d in devices:
+        vendor_id = d['vendor_id']
+        product_id = d['product_id']
+        path = d['path'].decode('utf-8') if isinstance(d['path'], bytes) else d['path']
+        
+        line = f"VID: {vendor_id} | PID: {product_id} | path: {path}"
+        device_list.append(line)
+        print(f"Found: {line}")
+    pyperclip.copy("\n".join(device_list))
+
+def listen(device_info):
+    """Opens an HID device and prints raw reports.
+    a.k.a - don't use it if you don't undertand it."""
+    try:
+        device = hid.device()
+        device.open_path(device_info['path'])
+        device.set_nonblocking(True)
+        
+        # make it short
+        label = device_info['path'].decode('utf-8').split('#')[-2]
+        
+        while True:
+            data = device.read(64)
+            if data:
+                print(f"[{label}]: {list(data)}")
+            time.sleep(0.01)
+    except Exception as e:
+        print(f"no connection to {label}: {e}")
+
+
+NSI = []
+CONTROLLER_STATE = {}
+def poll_controller():
+    """
+    Background thread, that polls for irrgular inputs.
+    """
+    global NSI, CONTROLLER_STATE
+    
+    while True:
+        try:
+            events = get_gamepad()
+            for event in events:
+                if event.ev_type == "Sync":
+                    continue
+                CONTROLLER_STATE[event.code] = event.state
+                input_data = {"type": event.ev_type, "code": event.code, "state": event.state}
+                NSI.append(input_data)
+                if event.code and Debug:
+                    print(f"\rDebug Input: {event.code} = {event.state}   ")
+                
+        except UnpluggedError:
+            CONTROLLER_STATE.clear()
+            time.sleep(2)
+        except Exception:
+            time.sleep(1)
+                
+gamepad_thread = threading.Thread(target=poll_controller, daemon=True)
+gamepad_thread.start()
+
+
 def get_char(n=1):
     """reads inputs char by char."""
     if os.name == 'nt':
@@ -232,7 +310,7 @@ def char_available():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
         return bool(dr)
 
-def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis=True):
+def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis=True, inputs:list=["keyboard","mouse","arrows","ESC","controller"]):
     """Fancy input, input that allows mouse inputs."""
     sys.stdout.write(prompt)
     sys.stdout.write(ENABLE_MOUSE)
@@ -244,12 +322,59 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
     hide  = "\033[8m" if not vis else ""
     reset = "\033[28m" if not vis else ""
 
+    result = {}
+
     try:
         while True:
-            # a tick so you don't need to use threading
+            # a tick so you dont need to use threading
             exec(tick_func)
             time.sleep(0.01)
-            # check if theirs an input, if so read it.
+
+            rc = {}
+            controller_updated = False
+            while len(NSI) > 0 and "controller" in inputs: 
+                NSI.pop(0) 
+                controller_updated = True
+
+            if controller_updated:
+                rc = []
+                letter_buttons = ["BTN_SOUTH","BTN_EAST","BTN_NORTH","BTN_WEST","BTN_TL","BTN_TR","START","SELECT","BTN_THUMBL","BTN_THUMBR"]
+                buttons_name = ["A_BTN","B_BTN","X_BTN","Y_BTN","L_BUMPER","R_BUMPER","START","SELECT","L_STICK_C","R_STICK_C"]
+                var_buttons = ["ABS_Z","ABS_RZ","ABS_X","ABS_Y","ABS_RX","ABS_RY"]
+                var_names   = ["L_TRIGGER","R_TRIGGER","L_STICK_X","L_STICK_Y","R_STICK_X","R_STICK_Y"]
+
+                for code, state in list(CONTROLLER_STATE.items()):
+                    
+                    # Buttons
+                    if code in letter_buttons and state == 1:
+                        rc.append(buttons_name[letter_buttons.index(code)])
+                    
+                    # D-Pad
+                    elif code == "ABS_HAT0Y" and state != 0:
+                        rc.append(["","DPAD_DOWN","DPAD_UP"][state])
+                    elif code == "ABS_HAT0X" and state != 0:
+                        rc.append(["","DPAD_RIGHT","DPAD_LEFT"][state])
+                    
+                    #
+                    elif code in var_buttons: 
+                        name = var_names[var_buttons.index(code)]
+                        # add deadzones, for stick drift.
+                        deadzone = 5 if "Z" in code else 2500 
+                        if abs(state) > deadzone:
+                            rc.append((name, state))
+                            
+                    # evrything else
+                    elif code not in letter_buttons and code not in ["ABS_HAT0Y", "ABS_HAT0X"] and code not in var_buttons:
+                        if state != 0:
+                            rc.append((code, state))
+
+                # fancy stuff for performance
+                last_rc = getattr(finput, "last_rc", None)
+                if rc != last_rc:
+                    finput.last_rc = rc
+                    result["controller"] = rc
+                    return result
+
             if not char_available():
                 continue
             char = get_char(1)
@@ -257,9 +382,13 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                 continue
 
             if buffer or char == '\x1b':
+                if not buffer and char == '\x1b' and "ESC" in inputs:
+                    time.sleep(0.01)
+                    if not char_available():
+                        return {"ESC":"ESC"}
                 buffer += char    
                 # stuff for mouse
-                if buffer.startswith('\x1b[<'):
+                if buffer.startswith('\x1b[<') and "mouse" in inputs:
                     match = mouse_regex.search(buffer)
                     if match:
                         button, t_col, t_row, action = match.groups()
@@ -273,7 +402,14 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                         elif button == '65': btn_name = "Scroll Down"  if long else "SD"
                         else: btn_name = "Unknown"
 
-                        return (action, btn_name,t_col,t_row) # (m/M) (name) (y) (x)
+                        result["mouse"] = (action, btn_name,t_col,t_row) # (m/M) (name) (y) (x)
+                elif buffer.startswith('\x1b[') and "arrows" in inputs:
+                    if len(buffer) == 3 and buffer[2] in ('A', 'B', 'C', 'D'):
+                        direction = {'A': 'UP', 'B': 'DOWN', 'C': 'RIGHT', 'D': 'LEFT'}[buffer[2]]
+                        buffer = ""
+                        result["arrows"] = direction
+                    if char.isalpha() and char not in ('A', 'B', 'C', 'D'): 
+                        buffer = ""
                 # other stuff
                 elif buffer.startswith('\x1b['):
                     if char.isalpha(): 
@@ -290,10 +426,12 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                 continue
 
             # normie text
+            if "keyboard" not in inputs:
+                result["keyboard"] = ""
             if char in ('\n', '\r'):
                 sys.stdout.write(hide + '\n' + reset)
                 sys.stdout.flush()
-                return user_input
+                result["keyboard"] = user_input
                 
             elif char in ('\x08', '\x7f'): # backspace
                 if len(user_input) > 0:
@@ -311,7 +449,10 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                     sys.stdout.write(hide + '\n' + reset)
                     sys.stdout.flush()
                     time.sleep(0.5)
-                    return user_input
+                    result["keyboard"] = user_input
+
+            return result
+    
     finally:
         sys.stdout.write(DISABLE_MOUSE)
         sys.stdout.flush()
@@ -465,14 +606,15 @@ def clickDemo():
 
     with RawTerminal():
         while True:
-            response = finput(prompt="> ", max_length=1)
-            if isinstance(response, tuple):
-                action_char, btn_name, x, y = response
+            response = finput(prompt="> ", max_length=1, inputs=["keyboard","mouse"])
+
+            if "mouse" in response:
+                action_char, btn_name, x, y = response["mouse"]
                 action = "Pressed" if action_char == 'M' else "Released"
                 place(int(x),int(y), f"[{btn_name} {action} at X:{x} Y:{y}]")
                 sys.stdout.flush()
-            else:
-                if response.strip().lower() == 'q':
+            elif "keyboard" in response:
+                if response["keyboard"].strip().lower() == 'q':
                     print("\nExiting click demo...")
                     break
 
@@ -485,18 +627,70 @@ def clockDemo():
 
     with RawTerminal():
         while True:
-            response = finput(max_length=1,vis=False,tick_func=f'clock_tick({lx},{ly},"\033[33m")' if lx and ly else 'pass')
-            if isinstance(response, tuple):
-                action_char, btn_name, x, y = response
+            response = finput(max_length=1,vis=False,tick_func=f'clock_tick({lx},{ly},"\033[33m")' if lx and ly else 'pass',inputs=["keyboard","mouse"])
+
+            if "mouse" in response:
+                _, _, x, y = response["mouse"]
                 place(int(x),int(y),f"[{time.strftime('%H:%M:%S')}]",cls=True)
                 lx, ly = x,y
-            else:
-                if response.strip().lower() == 'q':
+            elif "keyboard" in response:
+                if response["keyboard"].strip().lower() == 'q':
                     print("\033[28m\nExiting click demo...")
                     break
 
+def controllerDemo():
+    sys.stdout.write(CLEAR_SCREEN)
+    sys.stdout.flush()
+    print("Controller Demo: Press A, B, X, or Y on your gamepad.")
+    print("Type 'q' on your keyboard to exit.\n" + cursor().invis())
+
+    with RawTerminal():
+        while True:
+            response = finput(max_length=1, vis=False, inputs=["keyboard", "controller"])
+
+            if "keyboard" in response:
+                if response["keyboard"].strip().lower() == 'q':
+                    print("\033[28m\nExiting controller demo..." + cursor().vis())
+                    break
+            
+            elif "controller" in response:
+                value = response["controller"]
+                sys.stdout.write(f"\r\033[KGame pad input: [")
+                for i in range(len(value)):
+                    sys.stdout.write(f"{value[i]}" + ("," if i < len(value) - 1 else ""))
+                sys.stdout.write("]") 
+                sys.stdout.flush()
+    print(CLEAR_SCREEN)
+
+def DebugDemo():
+    while input("") != "q" : pass
+
 def main():
-    pass
+    print("Searching for controller interfaces...")
+    all_devices = hid.enumerate()
+    
+    # Filter only for your controller
+    my_interfaces = [d for d in all_devices if d['vendor_id'] == TARGET_VID and d['product_id'] == TARGET_PID]
+    
+    if not my_interfaces:
+        print("Controller not found. Check your connections.")
+        return
+
+    print(f"Found {len(my_interfaces)} interfaces. Starting listeners...")
+
+    # Start a thread for every interface found
+    threads = []
+    for dev in my_interfaces:
+        t = threading.Thread(target=listen, args=(dev,), daemon=True)
+        t.start()
+        threads.append(t)
+
+    # Keep main thread alive
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Exiting...")
 
 if __name__ == "__main__":
-    clockDemo()
+    main()
