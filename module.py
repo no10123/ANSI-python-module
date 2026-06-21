@@ -10,6 +10,9 @@ import hid
 import pyperclip
 import serial.tools.list_ports
 import shutil
+import ctypes
+import colorsys
+from DataFetcher import *
 
 class RawTerminal():
     def __init__(self):
@@ -225,7 +228,19 @@ def divider(char="-"):
     terminal_width = shutil.get_terminal_size(fallback=(80, 24)).columns
     print(char * terminal_width)
 
+def boxDrawings(id=["TL","TR","BL","BR","H","V","LT","RT","TT","BT","C"]):
+    if id == ["TL","TR","BL","BR","R","C"]:
+        return ""
+    else:
+        symbolList = ["\u250c","\u2510","\u2514","\u2518","\u2500","\u2500","\u251c","\u2524","\u252c","\u2534","\u253c"]
+        return symbolList[["TL","TR","BL","BR","R","C"].index(id)]
 
+def HSVtoRGB(H:int,S:int,V:int):
+    r, g, b = colorsys.hsv_to_rgb(H / 360, S / 100, V / 100)
+    return (255 * r, 255 * g, 255 * b)
+
+def HEXtoRGB(hex:str):
+    return tuple(int(hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
 #useful fancy stuff
 
 #non standered inputs
@@ -551,6 +566,35 @@ class Canvas:
         sys.stdout.write("".join(output))
         sys.stdout.flush()
 
+#fav-color pallate, (in rgb)
+catppuccin_mocha_rgb = {
+    "rosewater": (245, 224, 220),
+    "flamingo": (242, 205, 205),
+    "pink": (245, 194, 231),
+    "mauve": (203, 166, 247),
+    "red": (243, 139, 168),
+    "maroon": (235, 160, 172),
+    "peach": (250, 179, 135),
+    "yellow": (249, 226, 175),
+    "green": (166, 227, 161),
+    "teal": (148, 226, 213),
+    "sky": (137, 220, 235),
+    "sapphire": (116, 199, 236),
+    "blue": (137, 180, 250),
+    "lavender": (180, 190, 254),
+    "text": (205, 214, 244),
+    "subtext1": (186, 194, 222),
+    "subtext0": (166, 173, 200),
+    "overlay2": (148, 156, 187),
+    "overlay1": (127, 132, 156),
+    "overlay0": (108, 112, 128),
+    "surface2": (88, 91, 112),
+    "surface1": (69, 71, 90),
+    "surface0": (49, 50, 68),
+    "base": (30, 30, 46),
+    "mantle": (24, 24, 37),
+    "crust": (17, 17, 27),
+}
 
 C = Canvas()
 
@@ -807,6 +851,15 @@ def arrowsDemo():
                 
     print(CLEAR_SCREEN)
 
+def devDashboard():
+    print("type 'quit()' to quit.")
+    while True:
+        if exec(input(">>> ")) == "quit":
+            break
+
+def btopPy():
+    boxDrawings()
+
 import flipper
 def main():
     flipper.start()
@@ -818,4 +871,4 @@ if __name__ == "__main__":
     clear()
     for i in range(20):
         divider(" ")
-    arrowsDemo()
+    devDashboard()
