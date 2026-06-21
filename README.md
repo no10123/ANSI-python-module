@@ -15,5 +15,6 @@ credits:
 built by me
 
 used [ANSI Escape Sequences](https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797) a lot (ALSO is main source)
+btop4win - for most of the themes folder.
 
 built for stardance

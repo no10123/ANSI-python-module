@@ -13,6 +13,7 @@ import shutil
 import ctypes
 import colorsys
 from DataFetcher import *
+from themeParser import *
 
 class RawTerminal():
     def __init__(self):
@@ -71,6 +72,9 @@ class RawTerminal():
 # basic comands
 ENABLE_MOUSE = "\x1b[?1000h\x1b[?1006h"
 DISABLE_MOUSE = "\x1b[?1000l\x1b[?1006l"
+
+ENABLE_MOUSE_D = "\x1b[?1002h\x1b[?1006h"
+DISABLE_MOUSE_D = "\x1b[?1002l\x1b[?1006l"
 CLEAR_SCREEN = "\033[H\033[J"
 DoubleX = True
 
@@ -228,12 +232,18 @@ def divider(char="-"):
     terminal_width = shutil.get_terminal_size(fallback=(80, 24)).columns
     print(char * terminal_width)
 
-def boxDrawings(id=["TL","TR","BL","BR","H","V","LT","RT","TT","BT","C"]):
-    if id == ["TL","TR","BL","BR","R","C"]:
+lsbd = ["TL","TR","BL","BR","H","V","LT","RT","TT","BT","C"]
+symbolList = ["\u250c","\u2510","\u2514","\u2518","\u2500","\u2502","\u251c","\u2524","\u252c","\u2534","\u253c"]
+# box drawings
+def bd(id=lsbd,length:int=1,CC:str=color("default")):
+    if len(id[0]) > 1 and len(id) == 2:
+        id = [id[0],("H" if id[0][0] == id[1][0] else "V"),id[1]]
+    if id == lsbd:
         return ""
+    elif len(id) == 3:
+        return CC + symbolList[lsbd.index(id[0])] + symbolList[lsbd.index(id[1])] * length + symbolList[lsbd.index(id[2])] + "\033[0m"
     else:
-        symbolList = ["\u250c","\u2510","\u2514","\u2518","\u2500","\u2500","\u251c","\u2524","\u252c","\u2534","\u253c"]
-        return symbolList[["TL","TR","BL","BR","R","C"].index(id)]
+        return CC + symbolList[lsbd.index(id)] * length + "\033[0m"
 
 def HSVtoRGB(H:int,S:int,V:int):
     r, g, b = colorsys.hsv_to_rgb(H / 360, S / 100, V / 100)
@@ -332,10 +342,10 @@ def char_available():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
         return bool(dr)
 
-def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis=True, inputs:list=["keyboard","mouse","arrows","ESC","controller"]):
+def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis=True, inputs:list=["keyboard","mouse","arrows","ESC","controller"],drag:bool=False):
     """Fancy input, input that allows mouse inputs."""
     sys.stdout.write(prompt)
-    sys.stdout.write(ENABLE_MOUSE)
+    sys.stdout.write(ENABLE_MOUSE_D if drag else ENABLE_MOUSE)
     sys.stdout.flush()
 
     user_input = ""
@@ -354,9 +364,12 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
 
             rc = {}
             controller_updated = False
-            while len(NSI) > 0 and "controller" in inputs: 
-                NSI.pop(0) 
-                controller_updated = True
+            if "controller" in inputs:
+                while len(NSI) > 0: 
+                    NSI.pop(0) 
+                    controller_updated = True
+            else:
+                NSI.clear()
 
             if controller_updated:
                 rc = []
@@ -420,8 +433,12 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                         if   button == '0' : btn_name = "Left Click"   if long else "LC"
                         elif button == '1' : btn_name = "Middle Click" if long else "MC"
                         elif button == '2' : btn_name = "Right Click"  if long else "RC"
+                        elif button == '32': btn_name = "Left Drag"    if long else "LD"
+                        elif button == '33': btn_name = "Middle Drag"  if long else "MD"
+                        elif button == '34': btn_name = "Right Drag"   if long else "RD"
                         elif button == '64': btn_name = "Scroll Up"    if long else "SU"
                         elif button == '65': btn_name = "Scroll Down"  if long else "SD"
+                        elif button == '3' : btn_name = "Release"      if long else "R"
                         else: btn_name = "Unknown"
 
                         result["mouse"] = (action, btn_name,t_col,t_row) # (m/M) (name) (y) (x)
@@ -479,18 +496,22 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
 
     
     finally:
-        sys.stdout.write(DISABLE_MOUSE)
+        sys.stdout.write(DISABLE_MOUSE_D if drag else DISABLE_MOUSE)
         sys.stdout.flush()
 
 
-def clock_tick(x,y,c:str="\033[39m"):
+def clock_tick(x,y,c:str="\033[39m",cls:bool=True,b:bool=True,save:bool=False,CLS:bool=True):
     """Draws the time"""
-    place(int(x),int(y),c + f"[{time.strftime('%H:%M:%S')}]" + "\033[0m",cls=True)
+    if b:
+        place(int(x),int(y),c + f"[{time.strftime('%H:%M:%S')}]" + "\033[0m",cls=cls,save=save,CLS=CLS)
+    else:
+        place(int(x),int(y),c + f"{time.strftime('%H:%M:%S')}" + "\033[0m",cls=cls,save=save,CLS=CLS)
 
-def place(x:int,y:int,msg:str,cls:bool=False,save:bool=False):
+def place(x:int,y:int,msg:str,cls:bool=False,save:bool=False,CLS:bool=True):
     if cls: sys.stdout.write(CLEAR_SCREEN)
     if save: sys.stdout.write(c.savePos())
-    sys.stdout.write(f"\x1b[{y};{x}H\x1b[K{msg}")
+    CccC = '\x1b[K' if CLS else ''
+    sys.stdout.write(f"\x1b[{y};{x}H{CccC}{msg}")
     if save: sys.stdout.write(c.loadPos())
     sys.stdout.flush()
 
@@ -510,7 +531,7 @@ class Canvas:
         if 0 <= x < self.width and 0 <= y < self.height:
             self.buffer[y][x] = char
             self.colors[y][x] = color
-            if DoubleX:
+            if DoubleX and (x + 1 < self.width):
                 self.buffer[y][x + 1] = char
                 self.colors[y][x + 1] = color
 
@@ -858,7 +879,46 @@ def devDashboard():
             break
 
 def btopPy():
-    boxDrawings()
+    """A python btop4win clone
+    nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
+    theme = ThemeEngine()
+    theme.load_theme("nord")
+    p = {
+    "r" : theme.RESET,
+    "bg" : theme.get("main_bg") if False else "",
+    "t" : theme.get("main_fg"),
+    "T" : theme.get("title"),
+    "s" : theme.get("hi_fg"),
+    "cb": theme.get("cpu_box")
+    }
+    def P (l):
+        RR = ""
+        for i in range(len(l)):
+            RR += p[l[i]]
+        return RR
+    clear()
+    def ft (t):
+        return f'{p["s"]}{t[0]}{p["T"]}{t[1::]}{P(["r", "bg"])}'
+    
+    
+    padding_len = max(1, shutil.get_terminal_size(fallback=(80, 24)).columns - 12)
+    ms = 1000
+
+    top_bar = (
+        f'{p["bg"]}{p["t"]}' + 
+        f'{bd(["TL","TR"], CC=p["cb"])}{ft("¹cpu")}{bd(["TL","TR"], 2, p["cb"])}{ft("menu")}{bd(["TL","TR"], 0, p["cb"])}{ft("preset *")}' + 
+        f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cb"])}{p["T"]}{time.strftime("%H:%M:%S")}{p["t"]}{bd(["TL","TR"], int(padding_len/2) - len(str(ms)) - 9, p["cb"])}{p["r"]}' + 
+        f'{ft("-")}{ft(f" {ms}ms ")}{ft("+")}{p["t"]}{bd(["TL","TR"], CC=p["cb"])}'
+    )
+
+    print(top_bar)
+    
+    while True:
+        # Tick func updated to use the dynamic time_x placement
+        response = finput(max_length=1, vis=False, tick_func=f'clock_tick({int(padding_len/2) + 4}, 1, {repr(p["T"])}, False, False, True, False)', inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
+        if "ESC" in response:
+            sys.exit()
+
 
 import flipper
 def main():
@@ -868,7 +928,4 @@ def main():
 
 
 if __name__ == "__main__":
-    clear()
-    for i in range(20):
-        divider(" ")
-    devDashboard()
+    btopPy()
