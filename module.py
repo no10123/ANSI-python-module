@@ -235,13 +235,29 @@ def divider(char="-"):
 lsbd = ["TL","TR","BL","BR","H","V","LT","RT","TT","BT","C"]
 symbolList = ["\u250c","\u2510","\u2514","\u2518","\u2500","\u2502","\u251c","\u2524","\u252c","\u2534","\u253c"]
 # box drawings
-def bd(id=lsbd,length:int=1,CC:str=color("default")):
-    if len(id[0]) > 1 and len(id) == 2:
-        id = [id[0],("H" if id[0][0] == id[1][0] else "V"),id[1]]
+def bd(id=lsbd,length=1,CC:str=color("default")):
+    if len(id[0]) > 1:
+        if len(id) == 2:
+            id = [id[0],("H" if id[0][0] == id[1][0] else "V"),id[1]]
+        elif len(id) > 2 and len(id[1]) > 1:
+            lengths = length if isinstance(length, list) else [length] * (len(id) - 1)
+            if len(lengths) < len(id) - 1:
+                return ""
+            result = CC + symbolList[lsbd.index(id[0])]
+            for i in range(len(id) - 1):
+                if id[i][0] != id[i+1][0]:
+                    result += ((c.down(1) if id[i][0] == "T" else c.up(1)) + c.left(1) + symbolList[lsbd.index("V")]) * lengths[i]
+                    result += (c.down(1) if id[i][0] == "T" else c.up(1)) + c.left(1) + symbolList[lsbd.index(id[i+1])]
+                else:
+                    result += ((c.left(2) if id[i][1] == "R" else "") + symbolList[lsbd.index("H")]) * lengths[i]
+                    result += (c.left(2) if id[i][1] == "R" else "") + symbolList[lsbd.index(id[i+1])]        
+            return result + "\033[0m"
     if id == lsbd:
         return ""
     elif len(id) == 3:
         return CC + symbolList[lsbd.index(id[0])] + symbolList[lsbd.index(id[1])] * length + symbolList[lsbd.index(id[2])] + "\033[0m"
+    elif id == "V":
+        return CC + (symbolList[lsbd.index(id)] + c.down(1) + c.left(1)) * length + "\033[0m"
     else:
         return CC + symbolList[lsbd.index(id)] * length + "\033[0m"
 
@@ -879,6 +895,7 @@ def devDashboard():
             break
 
 def btopPy():
+    #
     """A python btop4win clone
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
     theme = ThemeEngine()
@@ -900,18 +917,19 @@ def btopPy():
     def ft (t):
         return f'{p["s"]}{t[0]}{p["T"]}{t[1::]}{P(["r", "bg"])}'
     
-    
-    padding_len = max(1, shutil.get_terminal_size(fallback=(80, 24)).columns - 12)
+    W, H = shutil.get_terminal_size()
+    padding_len = max(1, W - 12)
     ms = 1000
 
-    top_bar = (
+    print(end=
         f'{p["bg"]}{p["t"]}' + 
         f'{bd(["TL","TR"], CC=p["cb"])}{ft("¹cpu")}{bd(["TL","TR"], 2, p["cb"])}{ft("menu")}{bd(["TL","TR"], 0, p["cb"])}{ft("preset *")}' + 
         f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cb"])}{p["T"]}{time.strftime("%H:%M:%S")}{p["t"]}{bd(["TL","TR"], int(padding_len/2) - len(str(ms)) - 9, p["cb"])}{p["r"]}' + 
-        f'{ft("-")}{ft(f" {ms}ms ")}{ft("+")}{p["t"]}{bd(["TL","TR"], CC=p["cb"])}'
+        f'{ft("-")}{ft(f" {ms}ms ")}{ft("+")}{p["t"]}'
     )
-
-    print(top_bar)
+    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=False)
+    place(1,2,bd("V",H - 3,p["cb"]),CLS=False)
+    print()
     
     while True:
         # Tick func updated to use the dynamic time_x placement
