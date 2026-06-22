@@ -924,8 +924,8 @@ def btopPy():
     print(end=
         f'{p["bg"]}{p["t"]}' + 
         f'{bd(["TL","TR"], CC=p["cb"])}{ft("¹cpu")}{bd(["TL","TR"], 2, p["cb"])}{ft("menu")}{bd(["TL","TR"], 0, p["cb"])}{ft("preset *")}' + 
-        f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cb"])}{p["T"]}{time.strftime("%H:%M:%S")}{p["t"]}{bd(["TL","TR"], int(padding_len/2) - len(str(ms)) - 9, p["cb"])}{p["r"]}' + 
-        f'{ft("-")}{ft(f" {ms}ms ")}{ft("+")}{p["t"]}'
+        f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cb"])}{p["T"]}{time.strftime("%H:%M:%S")}{p["t"]}{bd(["TL","TR"], int(padding_len/2) - len(str(ms)) - 10, p["cb"])}{p["r"]}' + 
+        f'{ft("-")}{ft(f" {ms}ms ")}{ft("+")}{p["t"]} '
     )
     place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=False)
     place(1,2,bd("V",H - 3,p["cb"]),CLS=False)
@@ -935,7 +935,10 @@ def btopPy():
         # Tick func updated to use the dynamic time_x placement
         response = finput(max_length=1, vis=False, tick_func=f'clock_tick({int(padding_len/2) + 4}, 1, {repr(p["T"])}, False, False, True, False)', inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
         if "ESC" in response:
-            sys.exit()
+            sys.stdout.write("\033[28m\033[?25h")
+            sys.stdout.flush()
+            input("fheug: ")
+            break
 
 
 import flipper

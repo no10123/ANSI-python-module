@@ -4,6 +4,7 @@ import platform
 import subprocess
 import time
 import os
+import collections
 from ctypes import wintypes
 
 # windows api
@@ -230,3 +231,38 @@ def get_processes(filter_str="", reverse=False, tree=False):
         return tree_procs
 
     return procs
+
+def get_per_core_load():
+    """
+    Returns a list of %'s for each core.
+    """
+    return psutil.cpu_percent(interval=None, percpu=True)
+
+def get_cpu_info():
+    cpu_name = "Unknown"
+    try:
+        output = subprocess.check_output('wmic cpu get name', shell=True, text=True, stderr=subprocess.DEVNULL)
+        lines = output.strip().split('\n')
+        if len(lines) > 1:
+            cpu_name = lines[1].strip()
+    except:
+        pass
+    freq = psutil.cpu_freq()
+    current_ghz = freq.current / 1000 if freq else 0.0
+    return cpu_name, current_ghz
+
+load_history = collections.deque(maxlen=900)
+
+def update_load_history(current_load):
+    load_history.append(current_load)
+
+def get_load_averages():
+    """60, 300, and 900 avrage of samples"""
+    if len(load_history) == 0:
+        return 0.0, 0.0, 0.0
+    
+    def get_avg(samples):
+        subset = list(load_history)[-samples:]
+        return round(sum(subset) / len(subset), 2)
+
+    return get_avg(60), get_avg(300), get_avg(900)
