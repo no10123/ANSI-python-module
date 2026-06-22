@@ -505,10 +505,11 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                 
                 # auto submit feuture
                 if max_length != -1 and len(user_input) >= max_length:
-                    sys.stdout.write(hide + '\n' + reset)
+                    sys.stdout.write(hide + ('\n' if vis else "\x1b[1K\x1b[1G") + reset)
                     sys.stdout.flush()
                     time.sleep(0.5)
                     result["keyboard"] = user_input
+                    return result
 
     
     finally:
@@ -914,31 +915,96 @@ def btopPy():
             RR += p[l[i]]
         return RR
     clear()
-    def ft (t):
+    def ft (t:str):
         return f'{p["s"]}{t[0]}{p["T"]}{t[1::]}{P(["r", "bg"])}'
     
     W, H = shutil.get_terminal_size()
     padding_len = max(1, W - 12)
     ms = 1000
+    cpuName, GHz = get_cpu_info()
+    IC = get_per_core_load()
+    update_load_history(get_cpu_load())
+    current_queue = pdh.get_value(r"\System\Processor Queue Length")
+    load_history.append(current_queue)
+
+
 
     print(end=
         f'{p["bg"]}{p["t"]}' + 
         f'{bd(["TL","TR"], CC=p["cb"])}{ft("¹cpu")}{bd(["TL","TR"], 2, p["cb"])}{ft("menu")}{bd(["TL","TR"], 0, p["cb"])}{ft("preset *")}' + 
-        f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cb"])}{p["T"]}{time.strftime("%H:%M:%S")}{p["t"]}{bd(["TL","TR"], int(padding_len/2) - len(str(ms)) - 10, p["cb"])}{p["r"]}' + 
+        f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cb"])}{p["T"]}{time.strftime("%H:%M:%S")}{p["t"]}{bd(["TL","TR"], int((padding_len-1)/2) - len(str(ms)) - 10, p["cb"])}{p["r"]}' + 
         f'{ft("-")}{ft(f" {ms}ms ")}{ft("+")}{p["t"]} '
     )
+
+    place(W-33, 3, f'{cpuName}{bd(["TL","TR"], 4, p["cb"])}{GHz} GHz')
+    place(W-35,4,f"CPU graph {get_cpu_load()}")
+    for i in range(len(IC)):
+        place(W-35,5+i,f"C{i}  graph {IC[i]}")
+    GLA = get_load_averages()
+    place(W-35, 5+len(IC), f"Load AVG: {GLA[0]:>5.2f}  {GLA[1]:>5.2f}  {GLA[2]:>5.2f}", save=True)
+    place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cb"]), save=False)
     place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=False)
     place(1,2,bd("V",H - 3,p["cb"]),CLS=False)
     print()
     
-    while True:
-        # Tick func updated to use the dynamic time_x placement
-        response = finput(max_length=1, vis=False, tick_func=f'clock_tick({int(padding_len/2) + 4}, 1, {repr(p["T"])}, False, False, True, False)', inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
-        if "ESC" in response:
-            sys.stdout.write("\033[28m\033[?25h")
-            sys.stdout.flush()
-            input("fheug: ")
-            break
+    # shortcuts
+    s = {"¹":"print(end='cpu box toggled.')","t":"pass"}
+    Cs = {"NA":s["t"]}
+    infilter = False
+    filter = ""
+    global lastUpdate
+    lastUpdate = time.time()
+    with RawTerminal():
+        while True:
+            # get inputs
+            global update
+            def update():
+                global lastUpdate
+                if time.time() - lastUpdate < (ms/1000): return None
+                lastUpdate = time.time()
+                cpul = get_cpu_load()
+                IC = get_per_core_load()
+
+                update_load_history(cpul)
+                current_queue = pdh.get_value(r"\System\Processor Queue Length")
+                load_history.append(current_queue)
+                place(W-35,4,f"CPU {generate_cpu_bar(cpul,24)} {int(cpul):>3}%",save=True)
+                for i in range(len(IC)):
+                    place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24)} {int(IC[i]):>3}%",save=True)
+                GLA = get_load_averages()
+                place(W-35, 5+len(IC), f"Load AVG: {GLA[0]:>5.2f}  {GLA[1]:>5.2f}  {GLA[2]:>5.2f}", save=True)
+                place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cb"]), save=False)
+                place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=False)
+                clock_tick(int(padding_len/2) + 4, 1, p["T"], False, False, True, False)
+            
+            response = finput(max_length=1, vis=False, tick_func=f'update()', inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
+            if "ESC" in response:
+                break
+            elif "controller" in response:
+                response = response["controller"]
+                sys.stdout.write("\x1b[1K\x1b[1G")
+                for i in range(len(response)):
+                    sys.stdout.write(f"{response[i]}" + ("," if i < len(response) - 1 else "")) 
+                sys.stdout.flush()
+                for r in response:
+                    if r in Cs.keys():
+                        exec(s[r])
+            elif "keyboard" in response:
+                response = response["keyboard"]
+                if infilter:
+                    filter += response
+                elif response in s.keys():
+                    exec(s[response])
+            elif "arrows" in response:
+                response = response["arrows"]
+                print(end=f'\x1b[1K\x1b[1G{response}')
+            elif "mouse" in response:
+                action_char, btn_name, x, y = response["mouse"]
+                action = "Pressed" if action_char == 'M' else "Released"
+                print(end=f'\x1b[1K\x1b[1G{action=},{btn_name=},{x=},{y=}')
+
+                
+
 
 
 import flipper

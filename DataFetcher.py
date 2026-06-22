@@ -6,6 +6,8 @@ import time
 import os
 import collections
 from ctypes import wintypes
+import winreg
+import re
 
 # windows api
 PDH_FMT_DOUBLE = 0x00000200
@@ -28,18 +30,22 @@ class PDH_API:
     def get_value(self, path):
         self.pdh.PdhCollectQueryData(self.query)
         value = (ctypes.c_ulonglong * 2)() # placeholder
-        self.pdh.PdhGetFormattedCounterValue(self.counters[path], PDH_FMT_DOUBLE, None, ctypes.byref(value))
-        return float(ctypes.cast(ctypes.byref(value, 8), ctypes.POINTER(ctypes.c_double)).contents.value)
+        try:
+            self.pdh.PdhGetFormattedCounterValue(self.counters[path], PDH_FMT_DOUBLE, None, ctypes.byref(value))
+            return float(ctypes.cast(ctypes.byref(value, 8), ctypes.POINTER(ctypes.c_double)).contents.value)
+        except OSError:
+            return 0.0
 
 # init PDH
 pdh = PDH_API()
 # counters
 cpu_counter = pdh.add_counter(r"\Processor(_Total)\% Processor Time")
 disk_io_counter = pdh.add_counter(r"\LogicalDisk(_Total)\% Disk Time")
+queue_counter = pdh.add_counter(r"\System\Processor Queue Length")
 
 def get_cpu_load():
     """returns % CPU usage."""
-    return pdh.get_value(r"\Processor(_Total)\% Processor Time")
+    return round(pdh.get_value(r"\Processor(_Total)\% Processor Time"),0)
 
 def get_disk_io():
     """returns % Disk time usage."""
@@ -241,15 +247,24 @@ def get_per_core_load():
 def get_cpu_info():
     cpu_name = "Unknown"
     try:
-        output = subprocess.check_output('wmic cpu get name', shell=True, text=True, stderr=subprocess.DEVNULL)
-        lines = output.strip().split('\n')
-        if len(lines) > 1:
-            cpu_name = lines[1].strip()
+        key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+        raw_name, _ = winreg.QueryValueEx(key, "ProcessorNameString")
+        winreg.CloseKey(key)
+        
+        # clean up name
+        name = raw_name.strip()
+        if " with " in name:
+            name = name.split(" with ")[0]
+        if " @ " in name:
+            name = name.split(" @ ")[0]
+        name = name.replace("(R)", "").replace("(TM)", "").replace(" CPU", "")
+        name = re.sub(r'\s*\d+-Core Processor.*', '', name)
+        cpu_name = " ".join(name.split())
     except:
         pass
     freq = psutil.cpu_freq()
     current_ghz = freq.current / 1000 if freq else 0.0
-    return cpu_name, current_ghz
+    return cpu_name, round(current_ghz,2)
 
 load_history = collections.deque(maxlen=900)
 
@@ -257,7 +272,7 @@ def update_load_history(current_load):
     load_history.append(current_load)
 
 def get_load_averages():
-    """60, 300, and 900 avrage of samples"""
+    """60s, 300s, and 900s averages of the processor queue length"""
     if len(load_history) == 0:
         return 0.0, 0.0, 0.0
     
@@ -266,3 +281,27 @@ def get_load_averages():
         return round(sum(subset) / len(subset), 2)
 
     return get_avg(60), get_avg(300), get_avg(900)
+
+def generate_cpu_bar(percent, width=30, theme_colors=None):
+    """
+    creates a cpu bar
+    """
+    # The block character used in the image
+    block_char = " "
+    filled_blocks = int((percent / 100) * width)
+    empty_blocks = width - filled_blocks
+    
+    bar_string = ""
+    for i in range(filled_blocks):
+        current_percent = (i / width) * 100
+        # colors
+        if current_percent < 50:
+            color = "\033[48;2;150;200;250m" # light Blue
+        elif current_percent < 80:
+            color = "\033[48;2;150;250;150m" # light Green
+        else:
+            color = "\033[48;2;250;100;100m" # red
+            
+        bar_string += f"{color}{block_char}"
+    bar_string += f"\033[38;2;80;80;80m{block_char * empty_blocks}"
+    return bar_string + "\033[0m"
