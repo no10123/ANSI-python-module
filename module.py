@@ -920,6 +920,7 @@ def btopPy():
     
     W, H = shutil.get_terminal_size()
     padding_len = max(1, W - 12)
+    global ms
     ms = 1000
     cpuName, GHz = get_cpu_info()
     IC = get_per_core_load()
@@ -948,7 +949,7 @@ def btopPy():
     print()
     
     # shortcuts
-    s = {"¹":"print(end='cpu box toggled.')","t":"pass"}
+    s = {"¹":"print(end='cpu box toggled.')","t":"pass","-":"global ms\nms = max(ms - 100, 100)","+":"global ms\nms = min(ms + 100, 5000)"}
     Cs = {"NA":s["t"]}
     infilter = False
     filter = ""
@@ -958,9 +959,18 @@ def btopPy():
         while True:
             # get inputs
             global update
+            
             def update():
                 global lastUpdate
-                if time.time() - lastUpdate < (ms/1000): return None
+                #non ms based updates
+                place(W-14-(4-len(str(ms))), 1, f'{bd("H", 2 if len(str(ms)) == 3 else 0, p["cb"]) + bd("TR", CC=p["cb"])}{ft("-")}{ft(f" {ms}ms ")}{ft("+")}')
+                clock_tick(int(padding_len/2) + 4, 1, p["T"], False, False, True, False)
+                #ms based updates
+                if time.time() - lastUpdate < (ms/1000):
+                    place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cb"]), save=True)
+                    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=True)
+                    print("\n"*(H-2))
+                    return None;
                 lastUpdate = time.time()
                 cpul = get_cpu_load()
                 IC = get_per_core_load()
@@ -975,7 +985,7 @@ def btopPy():
                 place(W-35, 5+len(IC), f"Load AVG: {GLA[0]:>5.2f}  {GLA[1]:>5.2f}  {GLA[2]:>5.2f}", save=True)
                 place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cb"]), save=False)
                 place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=False)
-                clock_tick(int(padding_len/2) + 4, 1, p["T"], False, False, True, False)
+                print()
             
             response = finput(max_length=1, vis=False, tick_func=f'update()', inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
             if "ESC" in response:
