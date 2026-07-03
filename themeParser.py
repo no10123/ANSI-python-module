@@ -52,7 +52,7 @@ class ThemeEngine:
 
     def get(self, key):
         """gets color for key"""
-        return self.colors.get(key, "") if key != "r" else self.RESET 
+        return self.colors.get(key, "") if key not in ["r",""] else {"r":self.RESET,"":""}[key] 
     
     def newP(self):
         keys = [
@@ -72,7 +72,7 @@ class ThemeEngine:
 
             "download_start", "download_mid", "download_end",
             "upload_start", "upload_mid", "upload_end",
-            "r"
+            "r", ""
         ]
 
         return {k: self.get(k) for k in keys}

@@ -938,7 +938,7 @@ def btopPy():
         return RR
     clear()
     def ft (t:str):
-        return f'{p["s"]}{t[0]}{p["T"]}{t[1::]}{P(["r", "bg"])}'
+        return f'{p["hi_fg"]}{t[0]}{p["title"]}{t[1::]}{P(["r", ""])}'
     
     W, H = shutil.get_terminal_size()
     padding_len = max(1, W - 12)
@@ -953,21 +953,22 @@ def btopPy():
 
 
     print(end=
-        f'{p["bg"]}{p["t"]}' + 
-        f'{bd(["TL","TR"], CC=p["cb"])}{ft("¹cpu")}{bd(["TL","TR"], 2, p["cb"])}{ft("menu")}{bd(["TL","TR"], 0, p["cb"])}{ft("preset *")}' + 
-        f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cb"])}{p["T"]}{time.strftime("%H:%M:%S")}{p["t"]}{bd(["TL","TR"], int((padding_len-1)/2) - len(str(ms)) - 10, p["cb"])}{p["r"]}' + 
-        f'{ft("-")}{ft(f" {ms}ms ")}{ft("+")}{p["t"]} '
+        f'{p["main_bg"]}{p["main_fg"]}' +
+        f'{bd(["TL","TR"], CC=p["cpu_box"])}{ft("¹cpu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("menu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("preset *")}' +
+        f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cpu_box"])}{p["title"]}{time.strftime("%H:%M:%S")}{p["main_fg"]}' +
+        f'{bd(["TL","TR"], int((padding_len-1)/2) - len(str(ms)) - 10, p["cpu_box"])}{p["r"]}' +
+        f'{ft("-")}{ft(f" {ms}ms ")}{ft("+")}{p["main_fg"]} '
     )
 
-    place(W-33, 3, f'{cpuName}{bd(["TL","TR"], 4, p["cb"])}{GHz} GHz')
+    place(W-33, 3, f'{cpuName}{bd(["TL","TR"], 4, p["cpu_box"])}{GHz} GHz')
     place(W-35,4,f"CPU graph {get_cpu_load()}")
     for i in range(len(IC)):
         place(W-35,5+i,f"C{i}  graph {IC[i]}")
     GLA = get_load_averages()
     place(W-35, 5+len(IC), f"Load AVG: {GLA[0]:>5.2f}  {GLA[1]:>5.2f}  {GLA[2]:>5.2f}", save=True)
-    place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cb"]), save=False)
-    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=False)
-    place(1,2,bd("V",H - 3,p["cb"]),CLS=False)
+    place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=False)
+    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cpu_box"]), save=False)
+    place(1,2,bd("V",H - 3,p["cpu_box"]),CLS=False)
     print()
     
     # shortcuts
@@ -989,11 +990,11 @@ def btopPy():
             
             def update():
                 global lastUpdate
-                place(W-14-(4-len(str(ms))), 1, f'{bd("H", 2 if len(str(ms)) == 3 else 0, p["cb"]) + bd("TR", CC=p["cb"])}{ft("-")}{ft(f" {ms}ms ")}{ft("+")}')
-                clock_tick(int(padding_len/2) + 4, 1, p["T"], False, False, True, False)
+                place(W-14-(4-len(str(ms))), 1, f'{bd("H", 2 if len(str(ms)) == 3 else 0, p["cpu_box"]) + bd("TR", CC=p["cpu_box"])}{ft("-")}{ft(f" {ms}ms ")}{ft("+")}')
+                clock_tick(int(padding_len/2) + 4, 1, p["title"], False, False, True, False)
                 if time.time() - lastUpdate < (ms/1000):
-                    place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cb"]), save=True)
-                    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,10,W-2], CC=p["cb"]), save=True)
+                    place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=True)
+                    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,10,W-2], CC=p["cpu_box"]), save=True)
 
                     print("\n"*(H-2))
                     return None
@@ -1003,7 +1004,7 @@ def btopPy():
                 IC = get_per_core_load()
                 frame_buffer = []
                 frame_buffer.append(clear_graph_area(3, 2, graph_w, graph_h))
-                frame_buffer.append(cpu_graph(3, 2, graph_w, graph_h, cpu_cache, p["s"]))
+                frame_buffer.append(cpu_graph(3, 2, graph_w, graph_h, cpu_cache, p["main_fg"]))
                 sys.stdout.write("".join(frame_buffer))
                 sys.stdout.flush()
                 place(W-35,4,f"CPU {generate_cpu_bar(cpul,24)} {int(cpul):>3}%",save=True)
@@ -1013,8 +1014,8 @@ def btopPy():
                 place(W-35,5+len(IC),f"Load AVG: {GLA[0]:>4.2f}  {GLA[1]:>4.2f}  {GLA[2]:>4.2f}")
                 
                 # Draw boxes
-                place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cb"]), save=False)
-                place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=False)
+                place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=False)
+                place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cpu_box"]), save=False)
                 print()
             
             response = finput(max_length=1, vis=False, tick_func=f'update()', inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
@@ -1043,12 +1044,89 @@ def btopPy():
                 action = "Pressed" if action_char == 'M' else "Released"
                 print(end=f'\x1b[1K\x1b[1G{action=},{btn_name=},{x=},{y=}')
 
+import re
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+def strip_ansi(s):
+    return ANSI.sub("", s)
+
+
 def themeDemo(t="nord"):
+    """ANSI theme preview table (proper alignment)"""
+
     theme = ThemeEngine()
     theme.load_theme(t)
     p = theme.newP()
-    for k,v in list(p.items()):
-        print(v + k + "\033[0m")                
+
+    items = [
+        [["main_bg", "main_fg", "title", "hi_fg"],
+        ["selected_bg", "selected_fg", "inactive_fg"],
+        ["proc_misc"],
+        ["cpu_box", "mem_box", "net_box", "proc_box"],
+        ["div_line"]],
+
+        [["temp_start", "temp_mid", "temp_end"],
+        ["cpu_start", "cpu_mid", "cpu_end"]],
+
+        [["free_start", "free_mid", "free_end"],
+        ["cached_start", "cached_mid", "cached_end"],
+        ["available_start", "available_mid", "available_end"],
+        ["used_start", "used_mid", "used_end"]],
+
+        [["download_start", "download_mid", "download_end"],
+        ["upload_start", "upload_mid", "upload_end"]],
+    ]
+
+    reset = p.get("r", "\033[0m")
+    col_width = 16
+
+    print("\n--- theme preveiw ---\n")
+
+    for block in items:
+        max_rows = max(len(row) for row in block)
+
+        for i in range(max_rows):
+            row_out = ""
+
+            for row in block:
+                if i < len(row):
+                    k = row[i]
+                    val = p.get(k, "")
+                    cell = f"{val}{k}{reset}"
+
+                    visible_len = len(strip_ansi(cell))
+                    padding = col_width - visible_len
+
+                    row_out += cell + (" " * max(padding, 1)) + "| "
+                else:
+                    row_out += (" " * col_width) + "| "
+
+            print(row_out)
+
+        print("-" * (col_width * len(block)))
+
+    print("\n--- color blocks ---\n")
+
+    groups = [
+        ("UI", ["main_bg", "main_fg", "title", "hi_fg"]),
+        ("Boxes", ["cpu_box", "mem_box", "net_box", "proc_box", "div_line"]),
+        ("Selection", ["selected_bg", "selected_fg", "inactive_fg"]),
+        ("Graphs CPU", ["cpu_start", "cpu_mid", "cpu_end"]),
+        ("Graphs MEM", ["used_start", "used_mid", "used_end"]),
+        ("Network", ["download_start", "download_mid", "download_end"]),
+    ]
+
+    for name, keys in groups:
+        line = f"{name:<12} | "
+        for k in keys:
+            if k in p:
+                line += f"{p[k]}█{reset}"
+            else:
+                line += " "
+        print(line)
+
+    print()
 
 
 
@@ -1060,5 +1138,6 @@ def main():
 
 
 if __name__ == "__main__":
-    btopPy()
-    #themeDemo()
+    clear()
+    #btopPy()
+    themeDemo()
