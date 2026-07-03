@@ -82,6 +82,9 @@ DoubleX = True
 
 Debug = False
 
+
+theme = ThemeEngine()
+
 bg_color = ""
 
 
@@ -1055,7 +1058,6 @@ def strip_ansi(s):
 def themeDemo(t="nord"):
     """ANSI theme preview table (proper alignment)"""
 
-    theme = ThemeEngine()
     theme.load_theme(t)
     p = theme.newP()
 
@@ -1136,8 +1138,24 @@ def main():
     if flipper.port:
         flipper.cli(flipper.port)
 
+def themeselect():
+    i = 0
+    L = len(theme.ls())
+    themes = theme.ls()
+    favroites = []
+    while True:
+        clear()
+        print(f"theme = {themes[i]}")
+        themeDemo(themes[i])
+        I = input("")
+        if I == "quit":
+            break
+        elif I == "*":
+            favroites.append(themes[i])
+        i = (i + 1) % L
+    print(favroites)
 
 if __name__ == "__main__":
     clear()
     #btopPy()
-    themeDemo()
+    themeselect()

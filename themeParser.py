@@ -76,3 +76,9 @@ class ThemeEngine:
         ]
 
         return {k: self.get(k) for k in keys}
+    
+    def ls(self):
+        if not os.path.exists("themes"):
+            return []
+
+        return [f[:-6] for f in os.listdir("themes") if f.endswith(".theme")]
