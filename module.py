@@ -14,6 +14,8 @@ import ctypes
 import colorsys
 from DataFetcher import *
 from themeParser import *
+import collections
+import math
 
 class RawTerminal():
     def __init__(self):
@@ -92,9 +94,9 @@ def leadZero (i:int, d:int) -> str:
     """number, digits. (1,3) -> '001'"""
     return "0" * (d - len(str(i))) + str(i)
 
-def rgb(r,g,b,m="f"):
+def rgb(r, g, b, m="f"):
     """0 to 255 for each color, foreground/background"""
-    return f"\033[38;2;{r};{g};{b}m" if m.lower()[0] == "f" else "\033[48;2;{r};{g};{b}m" if m.lower() == "b" else ""
+    return f"\033[38;2;{r};{g};{b}m" if m.lower()[0] == "f" else f"\033[48;2;{r};{g};{b}m" if m.lower()[0] == "b" else ""
 
 class cursor:
     """invis() and vis() may not cetain terminals."""
@@ -232,6 +234,11 @@ def divider(char="-"):
     terminal_width = shutil.get_terminal_size(fallback=(80, 24)).columns
     print(char * terminal_width)
 
+def log(msg):
+    with open("debug.log", "a") as f:
+        f.write(f"{msg}\n")
+        f.flush()
+
 lsbd = ["TL","TR","BL","BR","H","V","LT","RT","TT","BT","C"]
 symbolList = ["\u250c","\u2510","\u2514","\u2518","\u2500","\u2502","\u251c","\u2524","\u252c","\u2534","\u253c"]
 # box drawings
@@ -261,14 +268,36 @@ def bd(id=lsbd,length=1,CC:str=color("default")):
     else:
         return CC + symbolList[lsbd.index(id)] * length + "\033[0m"
 
+shaded = {"none":" ","light":"\u2591","medium":"\u2592","dark":"\u2593"}
+def ps(p:int=0,c:str=""):
+    """0 <= p <= 3"""
+    return c + list(shaded.values())[p] + "\033[0m"
+
 def HSVtoRGB(H:int,S:int,V:int):
     r, g, b = colorsys.hsv_to_rgb(H / 360, S / 100, V / 100)
     return (255 * r, 255 * g, 255 * b)
 
 def HEXtoRGB(hex:str):
     return tuple(int(hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+
 #useful fancy stuff
 
+def clear_graph_area(x, y, width, height):
+    out = []
+    for row in range(height):
+        out.append(f"\x1b[{y + row};{x}H" + (" " * width))
+    return "".join(out)
+
+def cpu_graph(x, y, width, height, history, color):
+    if width <= 0 or height <= 0: return ""
+    samples = list(history)[-width:]
+    out = []
+    for col, value in enumerate(samples):
+        bar_height = round((value / 100.0) * height)
+        for row in range(bar_height):
+            current_row = (y + height - 1) - row
+            out.append(f"\x1b[{current_row};{x + col}H{color}█\033[0m")
+    return "".join(out)
 #non standered inputs
 # fancy stuff
 TARGET_VID = 0x1A2C
@@ -901,14 +930,7 @@ def btopPy():
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
     theme = ThemeEngine()
     theme.load_theme("nord")
-    p = {
-    "r" : theme.RESET,
-    "bg" : theme.get("main_bg") if False else "",
-    "t" : theme.get("main_fg"),
-    "T" : theme.get("title"),
-    "s" : theme.get("hi_fg"),
-    "cb": theme.get("cpu_box")
-    }
+    p = theme.newP()
     def P (l):
         RR = ""
         for i in range(len(l)):
@@ -955,6 +977,11 @@ def btopPy():
     filter = ""
     global lastUpdate
     lastUpdate = time.time()
+    cpu_width = 100
+    global graph_w, graph_h, cpu_cache
+    graph_w, graph_h = 90, 10
+    cpu_cache = collections.deque(maxlen=max(200, graph_w))
+
     with RawTerminal():
         while True:
             # get inputs
@@ -962,27 +989,30 @@ def btopPy():
             
             def update():
                 global lastUpdate
-                #non ms based updates
                 place(W-14-(4-len(str(ms))), 1, f'{bd("H", 2 if len(str(ms)) == 3 else 0, p["cb"]) + bd("TR", CC=p["cb"])}{ft("-")}{ft(f" {ms}ms ")}{ft("+")}')
                 clock_tick(int(padding_len/2) + 4, 1, p["T"], False, False, True, False)
-                #ms based updates
                 if time.time() - lastUpdate < (ms/1000):
                     place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cb"]), save=True)
-                    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=True)
+                    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,10,W-2], CC=p["cb"]), save=True)
+
                     print("\n"*(H-2))
-                    return None;
+                    return None
                 lastUpdate = time.time()
                 cpul = get_cpu_load()
+                cpu_cache.append(cpul)
                 IC = get_per_core_load()
-
-                update_load_history(cpul)
-                current_queue = pdh.get_value(r"\System\Processor Queue Length")
-                load_history.append(current_queue)
+                frame_buffer = []
+                frame_buffer.append(clear_graph_area(3, 2, graph_w, graph_h))
+                frame_buffer.append(cpu_graph(3, 2, graph_w, graph_h, cpu_cache, p["s"]))
+                sys.stdout.write("".join(frame_buffer))
+                sys.stdout.flush()
                 place(W-35,4,f"CPU {generate_cpu_bar(cpul,24)} {int(cpul):>3}%",save=True)
                 for i in range(len(IC)):
                     place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24)} {int(IC[i]):>3}%",save=True)
                 GLA = get_load_averages()
-                place(W-35, 5+len(IC), f"Load AVG: {GLA[0]:>5.2f}  {GLA[1]:>5.2f}  {GLA[2]:>5.2f}", save=True)
+                place(W-35,5+len(IC),f"Load AVG: {GLA[0]:>4.2f}  {GLA[1]:>4.2f}  {GLA[2]:>4.2f}")
+                
+                # Draw boxes
                 place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cb"]), save=False)
                 place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cb"]), save=False)
                 print()
@@ -1013,7 +1043,12 @@ def btopPy():
                 action = "Pressed" if action_char == 'M' else "Released"
                 print(end=f'\x1b[1K\x1b[1G{action=},{btn_name=},{x=},{y=}')
 
-                
+def themeDemo(t="nord"):
+    theme = ThemeEngine()
+    theme.load_theme(t)
+    p = theme.newP()
+    for k,v in list(p.items()):
+        print(v + k + "\033[0m")                
 
 
 
@@ -1026,3 +1061,4 @@ def main():
 
 if __name__ == "__main__":
     btopPy()
+    #themeDemo()

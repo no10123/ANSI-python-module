@@ -52,4 +52,27 @@ class ThemeEngine:
 
     def get(self, key):
         """gets color for key"""
-        return self.colors.get(key, "")
+        return self.colors.get(key, "") if key != "r" else self.RESET 
+    
+    def newP(self):
+        keys = [
+            "main_bg", "main_fg", "title", "hi_fg",
+            "selected_bg", "selected_fg", "inactive_fg",
+            "proc_misc",
+            "cpu_box", "mem_box", "net_box", "proc_box",
+            "div_line",
+
+            "temp_start", "temp_mid", "temp_end",
+            "cpu_start", "cpu_mid", "cpu_end",
+
+            "free_start", "free_mid", "free_end",
+            "cached_start", "cached_mid", "cached_end",
+            "available_start", "available_mid", "available_end",
+            "used_start", "used_mid", "used_end",
+
+            "download_start", "download_mid", "download_end",
+            "upload_start", "upload_mid", "upload_end",
+            "r"
+        ]
+
+        return {k: self.get(k) for k in keys}

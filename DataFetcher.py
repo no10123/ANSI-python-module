@@ -282,7 +282,7 @@ def get_load_averages():
 
     return get_avg(60), get_avg(300), get_avg(900)
 
-def generate_cpu_bar(percent, width=30, theme_colors=None):
+def generate_cpu_bar(percent, width=30, colors=["\033[48;2;150;200;250m", "\033[48;2;150;250;150m", "\033[48;2;250;100;100m"]):
     """
     creates a cpu bar
     """
@@ -296,11 +296,11 @@ def generate_cpu_bar(percent, width=30, theme_colors=None):
         current_percent = (i / width) * 100
         # colors
         if current_percent < 50:
-            color = "\033[48;2;150;200;250m" # light Blue
+            color = colors[0]
         elif current_percent < 80:
-            color = "\033[48;2;150;250;150m" # light Green
+            color = colors[1]
         else:
-            color = "\033[48;2;250;100;100m" # red
+            color = colors[2]
             
         bar_string += f"{color}{block_char}"
     bar_string += f"\033[38;2;80;80;80m{block_char * empty_blocks}"
