@@ -373,10 +373,8 @@ gamepad_thread.start()
 def get_char(n=1):
     """reads inputs char by char."""
     if os.name == 'nt':
-        try:
-            return os.read(0, n).decode('utf-8', errors='ignore')
-        except Exception:
-            return ""
+        import msvcrt
+        return msvcrt.getwch()
     else:
         return sys.stdin.read(n)
 
@@ -1140,20 +1138,23 @@ def main():
 
 def themeselect():
     i = 0
-    L = len(theme.ls())
     themes = theme.ls()
     favroites = []
-    while True:
-        clear()
-        print(f"theme = {themes[i]}")
-        themeDemo(themes[i])
-        I = input("")
-        if I == "quit":
-            break
-        elif I == "*":
-            favroites.append(themes[i])
-        i = (i + 1) % L
-    print(favroites)
+    with RawTerminal():
+        while True:
+            clear()
+            print(f"theme = {themes[i]}\n")
+            themeDemo(themes[i])
+            I = finput(inputs=["arrows"]).get("arrows")
+            if I == "DOWN":
+                break
+            elif I == "UP":
+                favroites.append(themes[i])
+            elif I == "RIGHT":
+                i = (i + 1) % len(themes)
+            elif I == "LEFT":
+                i = (i - 1) % len(themes)
+        print(favroites)
 
 if __name__ == "__main__":
     clear()
