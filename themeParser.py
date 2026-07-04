@@ -25,8 +25,9 @@ class ThemeEngine:
             return []
         return [f.replace('.theme', '') for f in os.listdir(self.theme_folder) if f.endswith('.theme')]
 
-    def load_theme(self, theme_name):
+    def load_theme(self, theme_name, tbg=False):
         """creates a dict w/ colors in .theme"""
+        self.tbg = tbg
         file_path = os.path.join(self.theme_folder, f"{theme_name}.theme")
         
         if not os.path.exists(file_path):
@@ -48,10 +49,15 @@ class ThemeEngine:
                     is_bg = key.endswith('_bg')
                     self.colors[key] = self.hex_to_ansi(hex_val, is_background=is_bg)
         
+        if not tbg:
+            self.RESET = self.get("main_bg" + "main_fg")
+        
         return True
 
     def get(self, key):
         """gets color for key"""
+        if self.tbg and key == "main_bg":
+            return ""
         return self.colors.get(key, "") if key not in ["r",""] else {"r":self.RESET,"":""}[key] 
     
     def newP(self):

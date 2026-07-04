@@ -35,7 +35,7 @@ theme[temp_mid]="#FF4500"
 theme[temp_end]="#FFD700"
 
 # CPU
-theme[cpu_start]="#00008B"
+theme[cpu_start]="#00108b"
 theme[cpu_mid]="#00BFFF"
 theme[cpu_end]="#87CEFA"
 

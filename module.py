@@ -291,7 +291,16 @@ def clear_graph_area(x, y, width, height):
         out.append(f"\x1b[{y + row};{x}H" + (" " * width))
     return "".join(out)
 
-def cpu_graph(x, y, width, height, history, color):
+def cpu_graph(x, y, width, height, history, color, char="█"):
+    if len(color[0]) == 1:
+        color = [color] * height
+    elif len(color) < height:
+        c = color
+        color = []
+        for i in range(height):
+            i = int(i // (height / len(c)))
+            color.append(c[i])
+            
     if width <= 0 or height <= 0: return ""
     samples = list(history)[-width:]
     out = []
@@ -299,7 +308,7 @@ def cpu_graph(x, y, width, height, history, color):
         bar_height = round((value / 100.0) * height)
         for row in range(bar_height):
             current_row = (y + height - 1) - row
-            out.append(f"\x1b[{current_row};{x + col}H{color}█\033[0m")
+            out.append(f"\x1b[{current_row};{x + col}H{color[row]}{char}\033[0m")
     return "".join(out)
 #non standered inputs
 # fancy stuff
@@ -926,12 +935,12 @@ def devDashboard():
             break
 
 def btopPy():
-    #
     """A python btop4win clone
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
     theme = ThemeEngine()
-    theme.load_theme("nord")
+    theme.load_theme("nord",tbg=True)
     p = theme.newP()
+    #input(p)
     def P (l):
         RR = ""
         for i in range(len(l)):
@@ -950,8 +959,6 @@ def btopPy():
     update_load_history(get_cpu_load())
     current_queue = pdh.get_value(r"\System\Processor Queue Length")
     load_history.append(current_queue)
-
-
 
     print(end=
         f'{p["main_bg"]}{p["main_fg"]}' +
@@ -1005,12 +1012,12 @@ def btopPy():
                 IC = get_per_core_load()
                 frame_buffer = []
                 frame_buffer.append(clear_graph_area(3, 2, graph_w, graph_h))
-                frame_buffer.append(cpu_graph(3, 2, graph_w, graph_h, cpu_cache, p["main_fg"]))
+                frame_buffer.append(cpu_graph(3, 2, graph_w, graph_h, cpu_cache, [p['cpu_start'],p['cpu_mid'],p['cpu_end']]))
                 sys.stdout.write("".join(frame_buffer))
                 sys.stdout.flush()
-                place(W-35,4,f"CPU {generate_cpu_bar(cpul,24)} {int(cpul):>3}%",save=True)
+                place(W-35,4,f"CPU {generate_cpu_bar(cpul,24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(cpul):>3}%",save=True)
                 for i in range(len(IC)):
-                    place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24)} {int(IC[i]):>3}%",save=True)
+                    place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(IC[i]):>3}%",save=True)
                 GLA = get_load_averages()
                 place(W-35,5+len(IC),f"Load AVG: {GLA[0]:>4.2f}  {GLA[1]:>4.2f}  {GLA[2]:>4.2f}")
                 
@@ -1024,7 +1031,7 @@ def btopPy():
                 break
             elif "controller" in response:
                 response = response["controller"]
-                sys.stdout.write("\x1b[1K\x1b[1G")
+                sys.stdout.write("\x1b[2K\x1b[1G")
                 for i in range(len(response)):
                     sys.stdout.write(f"{response[i]}" + ("," if i < len(response) - 1 else "")) 
                 sys.stdout.flush()
@@ -1032,6 +1039,7 @@ def btopPy():
                     if r in Cs.keys():
                         exec(s[r])
             elif "keyboard" in response:
+                print(end=f'\x1b[2K\x1b[1G')
                 response = response["keyboard"]
                 if infilter:
                     filter += response
@@ -1039,11 +1047,11 @@ def btopPy():
                     exec(s[response])
             elif "arrows" in response:
                 response = response["arrows"]
-                print(end=f'\x1b[1K\x1b[1G{response}')
+                print(end=f'\x1b[2K\x1b[1G{response}')
             elif "mouse" in response:
                 action_char, btn_name, x, y = response["mouse"]
                 action = "Pressed" if action_char == 'M' else "Released"
-                print(end=f'\x1b[1K\x1b[1G{action=},{btn_name=},{x=},{y=}')
+                print(end=f'\x1b[2K\x1b[1G{action=},{btn_name=},{x=},{y=}')
 
 import re
 
@@ -1056,7 +1064,7 @@ def strip_ansi(s):
 def themeDemo(t="nord"):
     """ANSI theme preview table (proper alignment)"""
 
-    theme.load_theme(t)
+    theme.load_theme(t,tbg=True)
     p = theme.newP()
 
     items = [
@@ -1136,9 +1144,8 @@ def main():
     if flipper.port:
         flipper.cli(flipper.port)
 
-def themeselect():
+def themeselect(themes = theme.ls()):
     i = 0
-    themes = theme.ls()
     favroites = []
     with RawTerminal():
         while True:
@@ -1158,5 +1165,5 @@ def themeselect():
 
 if __name__ == "__main__":
     clear()
-    #btopPy()
-    themeselect()
+    btopPy()
+    #themeselect()

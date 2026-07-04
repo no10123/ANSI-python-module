@@ -282,12 +282,10 @@ def get_load_averages():
 
     return get_avg(60), get_avg(300), get_avg(900)
 
-def generate_cpu_bar(percent, width=30, colors=["\033[48;2;150;200;250m", "\033[48;2;150;250;150m", "\033[48;2;250;100;100m"]):
+def generate_cpu_bar(percent, width=30, colors=["\033[48;2;150;200;250m", "\033[48;2;150;250;150m", "\033[48;2;250;100;100m"],block_char = "█"):
     """
     creates a cpu bar
     """
-    # The block character used in the image
-    block_char = " "
     filled_blocks = int((percent / 100) * width)
     empty_blocks = width - filled_blocks
     
