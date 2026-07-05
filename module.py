@@ -16,6 +16,10 @@ from DataFetcher import *
 from themeParser import *
 import collections
 import math
+import pygame
+import yt_dlp
+
+
 
 class RawTerminal():
     def __init__(self):
@@ -310,8 +314,38 @@ def cpu_graph(x, y, width, height, history, color, char="█"):
             current_row = (y + height - 1) - row
             out.append(f"\x1b[{current_row};{x + col}H{color[row]}{char}\033[0m")
     return "".join(out)
-#non standered inputs
+
+pygame.init()
+pygame.mixer.init()
+def playFile(name):
+    pygame.mixer.music.load(f"music/{name}.mp3")
+    pygame.mixer.music.play(-1)
+
+#non standard inputs
 # fancy stuff
+def fetch_yt_audio(url, name="music"):
+    """converts YT link to .mp3 audio"""
+    #yt-dlp config
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': f'music/{name}.%(ext)s',
+        'quiet': True,
+        'no_warnings': True,
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
+
+    print(f"Fetching audio from {url}...")
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([url])
+    
+    print("Download complete.")
+    return f"{output_name}.mp3"
+
+
 TARGET_VID = 0x1A2C
 TARGET_PID = 0x4DBC
 
@@ -934,11 +968,25 @@ def devDashboard():
         if exec(input(">>> ")) == "quit":
             break
 
+def musicDemo():
+    url = input("url: ")
+    name = input("name: ")
+    fetch_yt_audio(url, name)
+    playFile(name)
+
+
 def btopPy():
     """A python btop4win clone
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
+    tbg = True
+    global TI, themes, theme, p, useFavorites, favorites, TIF
+    useFavorites = False
+    favorites = [3,5,7,12,40]
+    TIF = 0
     theme = ThemeEngine()
-    theme.load_theme("nord",tbg=True)
+    themes = theme.ls()
+    TI = themes.index("debug")
+    theme.load_theme(themes[TI],tbg)
     p = theme.newP()
     #input(p)
     def P (l):
@@ -978,10 +1026,34 @@ def btopPy():
     place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cpu_box"]), save=False)
     place(1,2,bd("V",H - 3,p["cpu_box"]),CLS=False)
     print()
+
+    def switchTheme(n=(TIF if useFavorites else TI)):
+        global TI, theme, p, TIF, useFavorites, favorites
+        if useFavorites and favorites:
+            TIF = n % len(favorites)
+            TI = favorites[TIF]
+        else:
+            TI = n % len(themes)
+        theme.load_theme(themes[TI],tbg)
+        p = theme.newP()
+        return TIF if useFavorites else TI
+
+    
+
     
     # shortcuts
-    s = {"¹":"print(end='cpu box toggled.')","t":"pass","-":"global ms\nms = max(ms - 100, 100)","+":"global ms\nms = min(ms + 100, 5000)"}
-    Cs = {"NA":s["t"]}
+    s = {"¹":"log('cpu box toggled.')",
+         "t":"pass",
+         "-":"global ms\nms = max(ms - 100, 100)",
+         "+":"global ms\nms = min(ms + 100, 5000)",
+         "k": "switchTheme((favorites.index(TI) - 1) % len(favorites) if useFavorites else TI - 1)",
+         "l": "switchTheme((favorites.index(TI) + 1) % len(favorites) if useFavorites else TI + 1)",
+         "j": "global favorites\nif TI in favorites:\n    favorites.remove(TI)\nelse:\n    favorites.append(TI)",
+         "J":"global useFavorites\nuseFavorites = not useFavorites\nswitchTheme()"
+    }
+    Cs = {('BTN_START',1):s["-"],
+          ('BTN_SELECT',1):s["+"],
+          }
     infilter = False
     filter = ""
     global lastUpdate
@@ -998,6 +1070,14 @@ def btopPy():
             
             def update():
                 global lastUpdate
+                place(1,2,bd("V",H - 3,p["cpu_box"]),CLS=False)
+                place(0,0,
+                    f'{p["main_bg"]}{p["main_fg"]}' +
+                    f'{bd(["TL","TR"], CC=p["cpu_box"])}{ft("¹cpu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("menu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("preset *")}' +
+                    f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cpu_box"])}{p["title"]}{time.strftime("%H:%M:%S")}{p["main_fg"]}' +
+                    f'{bd(["TL","TR"], int((padding_len-1)/2) - len(str(ms)) - 10, p["cpu_box"])}{p["r"]}'
+                )
+                
                 place(W-14-(4-len(str(ms))), 1, f'{bd("H", 2 if len(str(ms)) == 3 else 0, p["cpu_box"]) + bd("TR", CC=p["cpu_box"])}{ft("-")}{ft(f" {ms}ms ")}{ft("+")}')
                 clock_tick(int(padding_len/2) + 4, 1, p["title"], False, False, True, False)
                 if time.time() - lastUpdate < (ms/1000):
@@ -1036,8 +1116,8 @@ def btopPy():
                     sys.stdout.write(f"{response[i]}" + ("," if i < len(response) - 1 else "")) 
                 sys.stdout.flush()
                 for r in response:
-                    if r in Cs.keys():
-                        exec(s[r])
+                    if r in Cs:
+                        exec(Cs[r])
             elif "keyboard" in response:
                 print(end=f'\x1b[2K\x1b[1G')
                 response = response["keyboard"]
@@ -1052,8 +1132,6 @@ def btopPy():
                 action_char, btn_name, x, y = response["mouse"]
                 action = "Pressed" if action_char == 'M' else "Released"
                 print(end=f'\x1b[2K\x1b[1G{action=},{btn_name=},{x=},{y=}')
-
-import re
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -1150,7 +1228,7 @@ def themeselect(themes = theme.ls()):
     with RawTerminal():
         while True:
             clear()
-            print(f"theme = {themes[i]}\n")
+            print(f"theme = {i}, {themes[i]}\n")
             themeDemo(themes[i])
             I = finput(inputs=["arrows"]).get("arrows")
             if I == "DOWN":
@@ -1165,5 +1243,6 @@ def themeselect(themes = theme.ls()):
 
 if __name__ == "__main__":
     clear()
-    btopPy()
+    #btopPy()
     #themeselect()
+    musicDemo()
