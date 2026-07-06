@@ -77,7 +77,7 @@ class RawTerminal():
                 import termios
                 termios.tcsetattr(self.fd_in, termios.TCSADRAIN, self.old_settings)
 
-# basic comands
+# basic commands
 ENABLE_MOUSE = "\x1b[?1000h\x1b[?1006h"
 DISABLE_MOUSE = "\x1b[?1000l\x1b[?1006l"
 
@@ -1058,10 +1058,12 @@ def btopPy():
          "k": "switchTheme((favorites.index(TI) - 1) % len(favorites) if useFavorites else TI - 1)",
          "l": "switchTheme((favorites.index(TI) + 1) % len(favorites) if useFavorites else TI + 1)",
          "j": "global favorites\nif TI in favorites:\n    favorites.remove(TI)\nelse:\n    favorites.append(TI)",
-         "J":"global useFavorites\nuseFavorites = not useFavorites\nswitchTheme()"
+         "J":"global useFavorites\nuseFavorites = not useFavorites\nswitchTheme()",
+         "q":"global quit\nquit = True"
     }
     Cs = {('BTN_START',1):s["-"],
           ('BTN_SELECT',1):s["+"],
+          ('R_TRIGGER',255):s["q"],
           }
     infilter = False
     filter = ""
@@ -1075,11 +1077,11 @@ def btopPy():
     with RawTerminal():
         while True:
             # get inputs
-            global update
+            global update, quit
             
             def update():
                 global lastUpdate
-                cava_graph(H - 2,2,21, p["proc_misc"])
+                #cava_graph(H - 2,2,21, p["proc_misc"])
                 place(1,2,bd("V",H - 3,p["cpu_box"]),CLS=False)
                 place(0,0,
                     f'{p["main_bg"]}{p["main_fg"]}' +
@@ -1125,16 +1127,22 @@ def btopPy():
                 for i in range(len(response)):
                     sys.stdout.write(f"{response[i]}" + ("," if i < len(response) - 1 else "")) 
                 sys.stdout.flush()
+                quit = False
                 for r in response:
                     if r in Cs:
                         exec(Cs[r])
+                if quit:
+                    break
             elif "keyboard" in response:
                 print(end=f'\x1b[2K\x1b[1G')
                 response = response["keyboard"]
                 if infilter:
                     filter += response
-                elif response in s.keys():
+                elif response in s:
+                    quit = False
                     exec(s[response])
+                    if quit:
+                        break
             elif "arrows" in response:
                 response = response["arrows"]
                 print(end=f'\x1b[2K\x1b[1G{response}')
