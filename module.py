@@ -1079,7 +1079,7 @@ def btopPy():
             
             def update():
                 global lastUpdate
-                cava_graph(H - 2,2,21)
+                cava_graph(H - 2,2,21, p["proc_misc"])
                 place(1,2,bd("V",H - 3,p["cpu_box"]),CLS=False)
                 place(0,0,
                     f'{p["main_bg"]}{p["main_fg"]}' +
@@ -1273,7 +1273,7 @@ def cava_graph(bottom_row, start_col, max_height, color=color("default")):
             else:
                 char = " "
                 
-            frame_buffer += f"\x1b[{current_row};{start_col + col_index}H{char}"
+            frame_buffer += f"\033[{current_row};{start_col + col_index}H{color}{char}\033[0m"
             
     sys.stdout.write(frame_buffer)
     sys.stdout.flush()
@@ -1317,3 +1317,4 @@ if __name__ == "__main__":
     #playFile("bg_music")
     btopPy()
     #cavaDemo()
+    #themeselect()
