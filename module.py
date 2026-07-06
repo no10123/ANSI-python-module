@@ -18,7 +18,9 @@ import collections
 import math
 import pygame
 import yt_dlp
-
+import soundcard as sc
+import numpy as np
+import warnings
 
 
 class RawTerminal():
@@ -86,6 +88,8 @@ DoubleX = True
 
 Debug = False
 
+BLOCKS = [" ", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+W, H = shutil.get_terminal_size()
 
 theme = ThemeEngine()
 
@@ -289,30 +293,33 @@ def HEXtoRGB(hex:str):
 
 #useful fancy stuff
 
-def clear_graph_area(x, y, width, height):
+def clear_graph_area(x:int, y:int, width:int, height:int):
     out = []
     for row in range(height):
         out.append(f"\x1b[{y + row};{x}H" + (" " * width))
     return "".join(out)
 
-def cpu_graph(x, y, width, height, history, color, char="█"):
+def cpu_graph(x:int, y:int, width:int, height:int, history:list, color, char:str="█", smooth:bool=True, max:float=100.0):
     if len(color[0]) == 1:
-        color = [color] * height
+        color = [color] * (height)
     elif len(color) < height:
         c = color
         color = []
         for i in range(height):
             i = int(i // (height / len(c)))
             color.append(c[i])
-            
     if width <= 0 or height <= 0: return ""
     samples = list(history)[-width:]
     out = []
     for col, value in enumerate(samples):
-        bar_height = round((value / 100.0) * height)
-        for row in range(bar_height):
+        bar_height = int((value / max) * height)
+        extra = (value / max) * height - bar_height
+        for row in range(bar_height + 1):
             current_row = (y + height - 1) - row
-            out.append(f"\x1b[{current_row};{x + col}H{color[row]}{char}\033[0m")
+            if row < bar_height:
+                out.append(f"\x1b[{current_row};{x + col}H{color[min(row, len(color) - 1)]}{char}\033[0m")
+            elif int(7 * extra) != 0:
+                out.append(f"\x1b[{current_row};{x + col}H{color[min(row, len(color) - 1)]}{BLOCKS[int(7 * extra)]}\033[0m")
     return "".join(out)
 
 pygame.init()
@@ -979,7 +986,10 @@ def btopPy():
     """A python btop4win clone
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
     tbg = True
-    global TI, themes, theme, p, useFavorites, favorites, TIF
+    global TI, themes, theme, p, useFavorites, favorites, TIF, cava_bins
+    cava_bins = [0] * (W - 3)
+    threading.Thread(target=audio_listener, daemon=True).start()
+    warnings.filterwarnings("ignore")
     useFavorites = False
     favorites = [3,5,7,12,40]
     TIF = 0
@@ -998,7 +1008,6 @@ def btopPy():
     def ft (t:str):
         return f'{p["hi_fg"]}{t[0]}{p["title"]}{t[1::]}{P(["r", ""])}'
     
-    W, H = shutil.get_terminal_size()
     padding_len = max(1, W - 12)
     global ms
     ms = 1000
@@ -1070,6 +1079,7 @@ def btopPy():
             
             def update():
                 global lastUpdate
+                cava_graph(H - 2,2,21)
                 place(1,2,bd("V",H - 3,p["cpu_box"]),CLS=False)
                 place(0,0,
                     f'{p["main_bg"]}{p["main_fg"]}' +
@@ -1083,7 +1093,7 @@ def btopPy():
                 if time.time() - lastUpdate < (ms/1000):
                     place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=True)
                     place(W-3, 1, bd(["TL","TR","BR","BL"], [1,10,W-2], CC=p["cpu_box"]), save=True)
-
+                    place(1, 13,  bd(["TL","TR"], W-3, p["cpu_box"]), save=True)
                     print("\n"*(H-2))
                     return None
                 lastUpdate = time.time()
@@ -1214,7 +1224,68 @@ def themeDemo(t="nord"):
 
     print()
 
+cava_bins = [0] * 50
+def audio_listener():
+    global cava_bins
+    speaker = sc.default_speaker()
+    mic = sc.get_microphone(speaker.id, include_loopback=True)
 
+    with mic.recorder(samplerate=44100) as mic_stream: 
+        while True:
+            try:
+                data = mic_stream.record(numframes=1024)
+                mono_data = data[:, 0]
+
+                windowed_data = mono_data * np.hanning(len(mono_data))
+                fft_data = np.abs(np.fft.rfft(windowed_data))
+                fft_data = fft_data[:len(fft_data)//2]
+                bins = np.array_split(fft_data, len(cava_bins))
+                new_volumes = [np.mean(b) * 1.5 for b in bins]
+                
+                # smoothing
+                for i in range(len(cava_bins)):
+                    # 70% old value, 30% new value
+                    cava_bins[i] = (cava_bins[i] * 0.7) + (new_volumes[i] * 0.3)
+            except Exception:
+                pass
+
+def cava_graph(bottom_row, start_col, max_height, color=color("default")):
+    if not cava_bins or len(cava_bins) == 0 or np.isnan(cava_bins[0]):
+        return
+        
+    frame_buffer = "\033[H" 
+    
+    for col_index, volume in enumerate(cava_bins):
+        val = min(max(float(volume), 0.0), float(max_height))
+
+        # 9.8 -> (9, 0.8)
+        full_blocks = int(val)
+        fraction = val - full_blocks
+        fraction_index = int(fraction * len(BLOCKS))
+        
+        for h in range(max_height):
+            current_row = bottom_row - h
+
+            if h < full_blocks:
+                char = "█"
+            elif h == full_blocks:
+                char = BLOCKS[min(fraction_index, len(BLOCKS) - 1)]
+            else:
+                char = " "
+                
+            frame_buffer += f"\x1b[{current_row};{start_col + col_index}H{char}"
+            
+    sys.stdout.write(frame_buffer)
+    sys.stdout.flush()
+
+def cavaDemo():
+    global cava_bins
+    threading.Thread(target=audio_listener, daemon=True).start()
+    warnings.filterwarnings("ignore")
+    cava_bins = [0] * W
+    while True:
+        cava_graph(H,1,H)
+        time.sleep(0.05)
 
 import flipper
 def main():
@@ -1243,6 +1314,6 @@ def themeselect(themes = theme.ls()):
 
 if __name__ == "__main__":
     clear()
-    #btopPy()
-    #themeselect()
-    musicDemo()
+    #playFile("bg_music")
+    btopPy()
+    #cavaDemo()
