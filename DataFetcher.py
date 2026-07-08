@@ -43,6 +43,13 @@ cpu_counter = pdh.add_counter(r"\Processor(_Total)\% Processor Time")
 disk_io_counter = pdh.add_counter(r"\LogicalDisk(_Total)\% Disk Time")
 queue_counter = pdh.add_counter(r"\System\Processor Queue Length")
 
+def format_bytes(bytes_value, force_unit=None):
+    if force_unit == "GiB" or (force_unit is None and bytes_value >= 1024**3):
+        return f"{bytes_value / (1024**3):.2f} GiB"
+    elif force_unit == "MiB" or (force_unit is None and bytes_value >= 1024**2):
+        return f"{bytes_value / (1024**2):.1f} MiB"
+    return f"{bytes_value / 1024:.1f} KiB"
+
 def get_cpu_load():
     """returns % CPU usage."""
     return round(pdh.get_value(r"\Processor(_Total)\% Processor Time"),0)
@@ -65,23 +72,58 @@ class MEMORYSTATUSEX(ctypes.Structure):
         ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
     ]
 
+class PERFORMANCE_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("cb", wintypes.DWORD),
+        ("CommitTotal", ctypes.c_size_t),
+        ("CommitLimit", ctypes.c_size_t),
+        ("CommitPeak", ctypes.c_size_t),
+        ("PhysicalTotal", ctypes.c_size_t),
+        ("PhysicalAvailable", ctypes.c_size_t),
+        ("SystemCache", ctypes.c_size_t),
+        ("KernelTotal", ctypes.c_size_t),
+        ("KernelPaged", ctypes.c_size_t),
+        ("KernelNonpaged", ctypes.c_size_t),
+        ("PageSize", ctypes.c_size_t),
+        ("HandleCount", wintypes.DWORD),
+        ("ProcessCount", wintypes.DWORD),
+        ("ThreadCount", wintypes.DWORD),
+    ]
+
+def get_windows_perf_info():
+    perf_info = PERFORMANCE_INFORMATION()
+    perf_info.cb = ctypes.sizeof(PERFORMANCE_INFORMATION)
+    try:
+        ctypes.windll.psapi.GetPerformanceInfo(ctypes.byref(perf_info), perf_info.cb)
+        return perf_info
+    except Exception:
+        return None
+
 def get_memory():
     stat = MEMORYSTATUSEX()
     stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
     ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+    perf = get_windows_perf_info()
+    page_size = perf.PageSize if perf else 4096
+    cache = (perf.SystemCache * page_size) if perf else 0
+    committed = (perf.CommitTotal * page_size) if perf else 0
+    
     return {
-        "total": stat.ullTotalPhys,
-        "used": stat.ullTotalPhys - stat.ullAvailPhys,
-        "avail": stat.ullAvailPhys,
-        "page_total": stat.ullTotalPageFile,
-        "page_used": stat.ullTotalPageFile - stat.ullAvailPageFile
+        "total"     : format_bytes(stat.ullTotalPhys),
+        "used"      : format_bytes(stat.ullTotalPhys - stat.ullAvailPhys),
+        "avail"     : format_bytes(stat.ullAvailPhys),
+        "cache"     : format_bytes(cache),
+        "commi"     : format_bytes(committed),
+        "page_total": format_bytes(stat.ullTotalPageFile),
+        "page_used" : format_bytes(stat.ullTotalPageFile - stat.ullAvailPageFile)
     }
 
 def get_cpu_ghz():
-    freq = ctypes.windll.kernel32.GetSystemTimes
-    # clock time for rms
-    # or WMI via COM/OLE. 
-    return 3.2 # placeholder
+    try:
+        freq = psutil.cpu_freq()
+        return round(freq.current / 1000, 2) if freq else 0.0
+    except (AttributeError, NotImplementedError):
+        return 0.0
 
 # system names
 def get_system_names():
@@ -150,13 +192,20 @@ def get_disks():
                 max_possible_ms = time_delta * 1000
                 if max_possible_ms > 0:
                     io_percent = min(100.0, (time_spent_ms / max_possible_ms) * 100)
-
+                read_bps = (io_now.read_bytes - io_old.read_bytes) / time_delta
+                write_bps = (io_now.write_bytes - io_old.write_bytes) / time_delta
+            else:
+                read_bps = 0
+                write_bps = 0
+            
             disks.append({
-                "name": drive_name,
-                "free": usage.free,
-                "used": usage.used,
-                "total": usage.total,
-                "io_percent": round(io_percent, 2)
+                "name": drive_name[:-1],
+                "free": format_bytes(usage.free),
+                "used": format_bytes(usage.used),
+                "total": format_bytes(usage.total),
+                "io_percent": round(io_percent, 2),
+                "read_speed": read_bps,
+                "write_speed": write_bps
             })
         except PermissionError:
             continue
@@ -165,6 +214,21 @@ def get_disks():
     last_disk_io = current_io
     last_disk_time = current_time
     return disks
+
+def get_disk_type(drive_letter):
+    """SSD or HDD
+    """
+    try:
+        cmd = f"Get-PhysicalDisk | Where-Object {{ $_.FriendlyName -match '(?i)SSD' -or $_.MediaType -eq 'SSD' }}"
+        ps_cmd = f"(Get-PhysicalDisk | Where-Object {{ $_.DeviceId -eq (Get-Partition -DriveLetter {drive_letter} | Select -ExpandProperty DiskNumber) }}).MediaType"
+        
+        result = subprocess.check_output(
+            ['powershell', '-NoProfile', '-Command', ps_cmd], 
+            text=True, creationflags=subprocess.CREATE_NO_WINDOW
+        ).strip()
+        return result if result else "HDD"
+    except:
+        return "Unknown"
 
 # network
 def get_network():

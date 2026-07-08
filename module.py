@@ -204,12 +204,12 @@ class graphics:
         "hidden"        : "\033[28m",
         "strikethrough" : "\033[29m"}
 
-def color(name="default", m="f", bright=False):
+def color(name:str="default", m:str="f", bright:bool=False):
     """name, foreground/background (f,b), bright (true/false)"""
     names = ["black","red","green","yellow","blue","magenta","cyan","white",None,"default"]
     return f"\033[{names.index(name.lower()) + 30 + (10 if m.lower()[0] == 'b' else 0) + (60 if bright else 0)}m" if name else ""
    
-def color256(id, m="f"):
+def color256(id:int, m:str="f"):
     """
     0-7: standard colors (as in ESC [ 30-37 m)
     8-15: high intensity colors (as in ESC [ 90-97 m)
@@ -218,7 +218,7 @@ def color256(id, m="f"):
     """
     return f"\033[{38 if m.lower()[0] == 'f' else 48};5;{id}m"
 
-def setMode(id, m="add"):
+def setMode(id:int, m:str="add"):
     """0 <= id <= 7 or 13 <= id <= 19 , add/remove (a/r)
     Changes the screen width or type to the mode specified by id.
     0 - 40 x 25 monochrome (text)
@@ -241,11 +241,11 @@ def setMode(id, m="add"):
     """
     return f"\033[{'=' if id != 1049 else '?'}{id}{'h' if m.lower()[0] == 'a' else 'l'}"
 
-def divider(char="-"):
+def divider(char:str="-"):
     terminal_width = shutil.get_terminal_size(fallback=(80, 24)).columns
     print(char * terminal_width)
 
-def log(msg):
+def log(msg:str):
     with open("debug.log", "a") as f:
         f.write(f"{msg}\n")
         f.flush()
@@ -291,6 +291,12 @@ def HSVtoRGB(H:int,S:int,V:int):
 def HEXtoRGB(hex:str):
     return tuple(int(hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
 
+def toggle_item(L:list, item):
+    if item in L:
+        L.remove(item)
+    else:
+        L.append(item)
+
 #useful fancy stuff
 
 def clear_graph_area(x:int, y:int, width:int, height:int):
@@ -324,13 +330,13 @@ def cpu_graph(x:int, y:int, width:int, height:int, history:list, color, char:str
 
 pygame.init()
 pygame.mixer.init()
-def playFile(name):
+def playFile(name:str):
     pygame.mixer.music.load(f"music/{name}.mp3")
     pygame.mixer.music.play(-1)
 
 #non standard inputs
 # fancy stuff
-def fetch_yt_audio(url, name="music"):
+def fetch_yt_audio(url:str, name:str="music"):
     """converts YT link to .mp3 audio"""
     #yt-dlp config
     ydl_opts = {
@@ -981,12 +987,12 @@ def musicDemo():
     fetch_yt_audio(url, name)
     playFile(name)
 
-
 def btopPy():
     """A python btop4win clone
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
     tbg = True
-    global TI, themes, theme, p, useFavorites, favorites, TIF, cava_bins
+    global TI, themes, theme, p, useFavorites, favorites, TIF, cava_bins, Windows
+    Windows = ["¹cpu","²mem","³net","⁴proc"] #["¹cpu","²mem","³net","⁴proc","cava"]
     cava_bins = [0] * (W - 3)
     threading.Thread(target=audio_listener, daemon=True).start()
     warnings.filterwarnings("ignore")
@@ -995,7 +1001,7 @@ def btopPy():
     TIF = 0
     theme = ThemeEngine()
     themes = theme.ls()
-    TI = themes.index("debug")
+    TI = themes.index("nord")
     theme.load_theme(themes[TI],tbg)
     p = theme.newP()
     #input(p)
@@ -1070,10 +1076,22 @@ def btopPy():
     global lastUpdate
     lastUpdate = time.time()
     cpu_width = 100
-    global graph_w, graph_h, cpu_cache
+    global graph_w, graph_h, cpu_cache, D
     graph_w, graph_h = 90, 10
     cpu_cache = collections.deque(maxlen=max(200, graph_w))
-
+    D = []
+    def types():
+        global D
+        while True:
+            new_D = []
+            for part in psutil.disk_partitions(all=False):
+                if os.name == 'nt' and ('cdrom' in part.opts or part.fstype == ''):
+                    continue
+                drive_name = part.device.replace('\\', '')
+                new_D.append(get_disk_type(drive_name[:-1]))
+            D = new_D 
+            time.sleep(10)
+    threading.Thread(target=types, daemon=True).start()
     with RawTerminal():
         while True:
             # get inputs
@@ -1081,8 +1099,41 @@ def btopPy():
             
             def update():
                 global lastUpdate
-                #cava_graph(H - 2,2,21, p["proc_misc"])
-                place(1,2,bd("V",H - 3,p["cpu_box"]),CLS=False)
+                csy = H - 2
+                csx = 2
+                ch  = H - 1
+                cw  = W - 3
+                if "¹cpu" in Windows:
+                    ch -= 14
+                if "⁴proc" in Windows:
+                    cw -= 70
+                if "³net" in Windows:
+                    csy -= 12
+                    ch  -= 12
+                
+                
+                if "cava" in Windows:
+                    cava_graph(csy, csx ,ch , p["proc_misc"], cava_bins[0:cw])
+                elif "²mem" in Windows:
+                    M = get_memory()
+                    Disks = get_disks()
+                    for i, j in enumerate(["total","used","avail","cache","commi"]):
+                        place(2,14 + i,f"{j[0].upper() + j[1:]}:{' ' * (11 - len(j))}{M[j]:>10}")
+                    place(2,20,f"Page files: {M["page_total"]:>10}")
+                    place(2,21,f"Used:       {M["page_used"]:>10}")
+                    place(min(cw-4,W-3)//2,14,"Letter-Total-used-avail-HDD/SDD",save=True)
+                    for i, disk in enumerate(Disks):
+                        i = i * 2
+                        place(min(cw-4,W-3)//2,15 + i,f'{(disk["name"]+":"):<3}|{disk["total"]:<10}|{disk["used"]:<10}|{disk["io_percent"]}')
+                        place(min(cw-4,W-3)//2,16 + i,f'   |{disk["free"]:<10}|{D[i//2] if len(D) > (i//2) else "loading..."}')
+                if "cava" in Windows or "²mem" in Windows:
+                    place(1,2,bd("V",H - 3,p["cpu_box"]),CLS=False)
+                    place(1,13,bd(["TL","TR","BR","BL","TL"],[min(cw+1,W-3),min(ch,H-2),min(cw+1,W-3),min(ch,H-2)], p["mem_box"]),save=True)
+                    if "²mem" in Windows:
+                        place(3,13,f"{p['mem_box']}┐{ft('²mem')}{p['mem_box']}┌{bd("H",min(cw-14,W-3)//2,p['mem_box'])}{p['mem_box']}┬─┐Disks{bd(['TL','TR'],min(cw-15,W-3)//2,p['mem_box'])}")
+                    else:
+                        place(3,13,f"{p['mem_box']}┐{ft('cava')}{bd(["TL","TR"],min(cw-6,W-3),p['mem_box'])}")
+                
                 place(0,0,
                     f'{p["main_bg"]}{p["main_fg"]}' +
                     f'{bd(["TL","TR"], CC=p["cpu_box"])}{ft("¹cpu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("menu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("preset *")}' +
@@ -1095,7 +1146,7 @@ def btopPy():
                 if time.time() - lastUpdate < (ms/1000):
                     place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=True)
                     place(W-3, 1, bd(["TL","TR","BR","BL"], [1,10,W-2], CC=p["cpu_box"]), save=True)
-                    place(1, 13,  bd(["TL","TR"], W-3, p["cpu_box"]), save=True)
+                    #place(1, 13,  bd(["TL","TR"], W-3, p["cpu_box"]), save=True)
                     print("\n"*(H-2))
                     return None
                 lastUpdate = time.time()
@@ -1257,13 +1308,13 @@ def audio_listener():
             except Exception:
                 pass
 
-def cava_graph(bottom_row, start_col, max_height, color=color("default")):
-    if not cava_bins or len(cava_bins) == 0 or np.isnan(cava_bins[0]):
+def cava_graph(bottom_row, start_col, max_height, color=color("default"), bins=cava_bins):
+    if not bins or len(bins) == 0 or np.isnan(bins[0]):
         return
         
     frame_buffer = "\033[H" 
     
-    for col_index, volume in enumerate(cava_bins):
+    for col_index, volume in enumerate(bins):
         val = min(max(float(volume), 0.0), float(max_height))
 
         # 9.8 -> (9, 0.8)
@@ -1300,6 +1351,8 @@ def main():
     flipper.start()
     if flipper.port:
         flipper.cli(flipper.port)
+    else:
+        print("no port")
 
 def themeselect(themes = theme.ls()):
     i = 0
@@ -1326,3 +1379,4 @@ if __name__ == "__main__":
     btopPy()
     #cavaDemo()
     #themeselect()
+    #main()
