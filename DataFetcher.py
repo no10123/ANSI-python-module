@@ -8,6 +8,7 @@ import collections
 from ctypes import wintypes
 import winreg
 import re
+import socket
 
 # windows api
 PDH_FMT_DOUBLE = 0x00000200
@@ -44,11 +45,29 @@ disk_io_counter = pdh.add_counter(r"\LogicalDisk(_Total)\% Disk Time")
 queue_counter = pdh.add_counter(r"\System\Processor Queue Length")
 
 def format_bytes(bytes_value, force_unit=None):
-    if force_unit == "GiB" or (force_unit is None and bytes_value >= 1024**3):
+    if force_unit == "PiB" or (force_unit is None and bytes_value >= 1024**5):
+        return f"{bytes_value / (1024**5):.2f} PiB"
+    elif force_unit == "TiB" or (force_unit is None and bytes_value >= 1024**4):
+        return f"{bytes_value / (1024**4):.2f} TiB"
+    elif force_unit == "GiB" or (force_unit is None and bytes_value >= 1024**3):
         return f"{bytes_value / (1024**3):.2f} GiB"
     elif force_unit == "MiB" or (force_unit is None and bytes_value >= 1024**2):
         return f"{bytes_value / (1024**2):.1f} MiB"
-    return f"{bytes_value / 1024:.1f} KiB"
+    elif force_unit == "KiB" or (force_unit is None and bytes_value >= 1024):
+        return f"{bytes_value / 1024:.2f} KiB"
+    else:
+        return f"{int(bytes_value)} Byte"
+
+def format_bits(bytes_value):
+    bits = bytes_value * 8
+    if bits >= 1024**3:
+        return f"{bits / (1024**3):.2f} Gibps"
+    elif bits >= 1024**2:
+        return f"{bits / (1024**2):.2f} Mibps"
+    elif bits >= 1024:
+        return f"{bits / 1024:.1f} Kibps"
+    else:
+        return f"{int(bits)} bps"
 
 def get_cpu_load():
     """returns % CPU usage."""
@@ -231,6 +250,65 @@ def get_disk_type(drive_letter):
         return "Unknown"
 
 # network
+last_net_io = psutil.net_io_counters(pernic=True)
+last_net_time = time.time()
+top_download = 0.0
+top_upload = 0.0
+
+def get_ipv4(interface_name):
+    """gets your ip address."""
+    try:
+        addrs = psutil.net_if_addrs().get(interface_name, [])
+        for addr in addrs:
+            if addr.family == socket.AF_INET:
+                return addr.address
+    except Exception:
+        pass
+    return "Disconnected"
+
+def get_network_speeds(interface_name):
+    """Speed of network"""
+    global last_net_io, last_net_time, top_download, top_upload
+    
+    current_time = time.time()
+    current_io = psutil.net_io_counters(pernic=True)
+    time_delta = current_time - last_net_time
+    
+    # fallbacks
+    data = {
+        "ip": get_ipv4(interface_name),
+        "down_speed_Bps": 0.0,
+        "up_speed_Bps": 0.0,
+        "down_total": 0,
+        "up_total": 0,
+        "top_down_Bps": top_download,
+        "top_up_Bps": top_upload
+    }
+
+    if interface_name in current_io and interface_name in last_net_io and time_delta > 0:
+        io_now = current_io[interface_name]
+        io_old = last_net_io[interface_name]
+        
+        down_bps = (io_now.bytes_recv - io_old.bytes_recv) / time_delta
+        up_bps = (io_now.bytes_sent - io_old.bytes_sent) / time_delta
+        
+        if down_bps > top_download: 
+            top_download = down_bps
+        if up_bps > top_upload: 
+            top_upload = up_bps
+            
+        data["down_speed_Bps"] = down_bps
+        data["up_speed_Bps"] = up_bps
+        data["down_total"] = io_now.bytes_recv
+        data["up_total"] = io_now.bytes_sent
+        data["top_down_Bps"] = top_download
+        data["top_up_Bps"] = top_upload
+    
+    last_net_io = current_io
+    last_net_time = current_time
+    
+    return data
+
 def get_network():
     """gets network info"""
     stats = psutil.net_if_stats()
@@ -253,12 +331,14 @@ def get_network():
         interfaces.append({
             "name": name,
             "type": if_type,
-            "sync": stat.isup, # is it running
-            "auto": True,      # should work
-            "zero": not stat.isup or name not in addrs # Disconnected or no IP assigned
+            "sync": stat.isup,
+            "auto": True,
+            "zero": not stat.isup or name not in addrs
         })
         
     return interfaces
+
+
 
 # proccesses
 def get_processes(filter_str="", reverse=False, tree=False):
