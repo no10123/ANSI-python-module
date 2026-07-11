@@ -992,7 +992,7 @@ def btopPy():
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
     tbg = True
     global TI, themes, theme, p, useFavorites, favorites, TIF, cava_bins, Windows
-    Windows = ["¹cpu","²mem","³net","⁴proc"] #["¹cpu","²mem","³net","⁴proc","cava"]
+    Windows = ["²mem","³net","⁴proc"] #["¹cpu","²mem","³net","⁴proc","cava"]
     cava_bins = [0] * (W - 3)
     threading.Thread(target=audio_listener, daemon=True).start()
     warnings.filterwarnings("ignore")
@@ -1055,9 +1055,13 @@ def btopPy():
 
     
 
-    
+    #["¹cpu","²mem","³net","⁴proc","cava"]
     # shortcuts
-    s = {"¹":"log('cpu box toggled.')",
+    s = {"1":"toggle_item(Windows, '¹cpu')",
+         "2":"toggle_item(Windows, '²mem')",
+         "3":"toggle_item(Windows, '³net')",
+         "4":"toggle_item(Windows, '⁴proc')",
+         "c":"toggle_item(Windows, 'cava')",
          "t":"pass",
          "-":"global ms\nms = max(ms - 100, 100)",
          "+":"global ms\nms = min(ms + 100, 5000)",
@@ -1113,27 +1117,36 @@ def btopPy():
                 
                 
                 if "cava" in Windows:
+                    sy = csy - 10
                     cava_graph(csy, csx ,ch , p["proc_misc"], cava_bins[0:cw])
                 elif "²mem" in Windows:
+                    sy = 13 if "¹cpu" in Windows else 2 
                     M = get_memory()
                     Disks = get_disks()
                     for i, j in enumerate(["total","used","avail","cache","commi"]):
-                        place(2,14 + i,f"{j[0].upper() + j[1:]}:{' ' * (11 - len(j))}{M[j]:>10}")
-                    place(2,20,f"Page files: {M["page_total"]:>10}")
-                    place(2,21,f"Used:       {M["page_used"]:>10}")
-                    place(min(cw-4,W-3)//2,14,"Letter-Total-used-avail-HDD/SDD",save=True)
+                        place(csx, sy + 1 + i, f"{j[0].upper() + j[1:]}:{' ' * (11 - len(j))}{M[j]:>10}")
+                    place(csx, sy + 7, f"Page files: {M['page_total']:>10}")
+                    place(csx, sy + 8, f"Used:       {M['page_used']:>10}")
+                    disk_x = min(cw - 4, W - 3) // 2
+                    place(disk_x, sy + 1, "Letter-Total-used-avail-HDD/SDD", save=True)
                     for i, disk in enumerate(Disks):
-                        i = i * 2
-                        place(min(cw-4,W-3)//2,15 + i,f'{(disk["name"]+":"):<3}|{disk["total"]:<10}|{disk["used"]:<10}|{disk["io_percent"]}')
-                        place(min(cw-4,W-3)//2,16 + i,f'   |{disk["free"]:<10}|{D[i//2] if len(D) > (i//2) else "loading..."}')
+                        y_offset = i * 2
+                        place(disk_x, sy + 2 + y_offset, f'{(disk["name"]+":"):<3}|{disk["total"]:<10}|{disk["used"]:<10}|{disk["io_percent"]}')
+                        place(disk_x, sy + 3 + y_offset, f'   |{disk["free"]:<10}|{D[i] if len(D) > i else "loading..."}')
+                    if sy == 2:
+                        cava_graph(csy + 3, csx, ch - 11, p["proc_misc"], cava_bins[0:cw])
                 if "cava" in Windows or "²mem" in Windows:
-                    place(1,2,bd("V",H - 3,p["cpu_box"]),CLS=False)
-                    place(1,13,bd(["TL","TR","BR","BL","TL"],[min(cw+1,W-3),min(ch,H-2),min(cw+1,W-3),min(ch,H-2)], p["mem_box"]),save=True)
+                    sy = 13 if "¹cpu" in Windows else 2
+                    place(1, 2, bd("V", H - 3, p["cpu_box"]), CLS=False)
+                    place(1, sy, bd(["TL","TR","BR","BL","TL"], [min(cw+1, W-3), min(ch, H-2), min(cw+1, W-3), min(ch, H-2)], p["mem_box"]), save=True)
                     if "²mem" in Windows:
-                        place(3,13,f"{p['mem_box']}┐{ft('²mem')}{p['mem_box']}┌{bd("H",min(cw-14,W-3)//2,p['mem_box'])}{p['mem_box']}┬─┐Disks{bd(['TL','TR'],min(cw-15,W-3)//2,p['mem_box'])}")
+                        place(3, sy, f"{p['mem_box']}┐{ft('²mem')}{p['mem_box']}┌{bd('H', min(cw-14, W-3)//2, p['mem_box'])}{p['mem_box']}┬─┐Disks{bd(['TL','TR'], min(cw-15, W-3)//2, p['mem_box'])}")
                     else:
-                        place(3,13,f"{p['mem_box']}┐{ft('cava')}{bd(["TL","TR"],min(cw-6,W-3),p['mem_box'])}")
-                
+                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-6, W-3), p['mem_box'])}")
+                    if "²mem" in Windows and sy == 2:
+                        sy = csy - 9
+                        place(1,sy,bd(["TL","TR"],2,p['mem_box']))
+                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-6, W-3), p['mem_box'])}")
                 place(0,0,
                     f'{p["main_bg"]}{p["main_fg"]}' +
                     f'{bd(["TL","TR"], CC=p["cpu_box"])}{ft("¹cpu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("menu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("preset *")}' +
@@ -1150,24 +1163,27 @@ def btopPy():
                     print("\n"*(H-2))
                     return None
                 lastUpdate = time.time()
-                cpul = get_cpu_load()
-                cpu_cache.append(cpul)
-                IC = get_per_core_load()
-                frame_buffer = []
-                frame_buffer.append(clear_graph_area(3, 2, graph_w, graph_h))
-                frame_buffer.append(cpu_graph(3, 2, graph_w, graph_h, cpu_cache, [p['cpu_start'],p['cpu_mid'],p['cpu_end']]))
-                sys.stdout.write("".join(frame_buffer))
-                sys.stdout.flush()
-                place(W-35,4,f"CPU {generate_cpu_bar(cpul,24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(cpul):>3}%",save=True)
-                for i in range(len(IC)):
-                    place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(IC[i]):>3}%",save=True)
-                GLA = get_load_averages()
-                place(W-35,5+len(IC),f"Load AVG: {GLA[0]:>4.2f}  {GLA[1]:>4.2f}  {GLA[2]:>4.2f}")
+                if ["¹cpu"] == Windows:
+                    pass
+                elif "¹cpu" in Windows:
+                    cpul = get_cpu_load()
+                    cpu_cache.append(cpul)
+                    IC = get_per_core_load()
+                    frame_buffer = []
+                    frame_buffer.append(clear_graph_area(3, 2, graph_w, graph_h))
+                    frame_buffer.append(cpu_graph(3, 2, graph_w, graph_h, cpu_cache, [p['cpu_start'],p['cpu_mid'],p['cpu_end']]))
+                    sys.stdout.write("".join(frame_buffer))
+                    sys.stdout.flush()
+                    place(W-35,4,f"CPU {generate_cpu_bar(cpul,24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(cpul):>3}%",save=True)
+                    for i in range(len(IC)):
+                        place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(IC[i]):>3}%",save=True)
+                    GLA = get_load_averages()
+                    place(W-35,5+len(IC),f"Load AVG: {GLA[0]:>4.2f}  {GLA[1]:>4.2f}  {GLA[2]:>4.2f}")
                 
-                # Draw boxes
-                place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=False)
-                place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cpu_box"]), save=False)
-                print()
+                    # Draw boxes
+                    place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=False)
+                    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cpu_box"]), save=False)
+                    print()
             
             response = finput(max_length=1, vis=False, tick_func=f'update()', inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
             if "ESC" in response:
