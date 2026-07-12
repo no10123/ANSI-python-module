@@ -400,7 +400,7 @@ def fetch_yt_audio(url:str, name:str="music"):
     print("Download complete.")
     return f"{output_name}.mp3"
 
-def img_pixel_matrix(path, max_width=100, override=True, sharpen=False):
+def img_pixel_matrix(path, max_width=None, sharpen=False):
     """takes img, and converts it to array"""
     try:
         img = Image.open(path).convert('RGB')
@@ -411,9 +411,10 @@ def img_pixel_matrix(path, max_width=100, override=True, sharpen=False):
     # resize img
     w, h = img.size
     aspect_ratio = h / w
-    w = max_width
+    if max_width: w = max_width
     h = int(w * aspect_ratio)
-    img = img.resize((w, h), Image.Resampling.LANCZOS)
+    resample_filter = Image.Resampling.NEAREST if sharpen else Image.Resampling.LANCZOS
+    img = img.resize((w, h), resample_filter)
     
     img_data = img.load()
     matrix = []
@@ -1056,7 +1057,7 @@ def musicDemo():
     playFile(name)
 
 def sixtelDemo():
-    matrix, w, h = img_pixel_matrix("dog.jpg", max_width=W)
+    matrix, w, h = img_pixel_matrix("imgs/moon-beach.png", W * 6)
     
     out = ["\033Pq"]
     sixel_chars = ['@', 'A', 'C', 'G', 'O', '_']
