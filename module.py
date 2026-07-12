@@ -21,7 +21,7 @@ import yt_dlp
 import soundcard as sc
 import numpy as np
 import warnings
-
+from PIL import Image
 
 class RawTerminal():
     def __init__(self):
@@ -400,6 +400,32 @@ def fetch_yt_audio(url:str, name:str="music"):
     print("Download complete.")
     return f"{output_name}.mp3"
 
+def img_pixel_matrix(path, max_width=100, override=True, sharpen=False):
+    """takes img, and converts it to array"""
+    try:
+        img = Image.open(path).convert('RGB')
+    except Exception as e:
+        print(f"Error loading image: {e}")
+        return None, 0, 0
+    
+    # resize img
+    w, h = img.size
+    aspect_ratio = h / w
+    w = max_width
+    h = int(w * aspect_ratio)
+    img = img.resize((w, h), Image.Resampling.LANCZOS)
+    
+    img_data = img.load()
+    matrix = []
+    
+    for y in range(h):
+        row = []
+        for x in range(w):
+            r, g, b = img_data[x, y]
+            row.append((r, g, b))
+        matrix.append(row)
+
+    return matrix, w, h
 
 TARGET_VID = 0x1A2C
 TARGET_PID = 0x4DBC
@@ -1029,6 +1055,28 @@ def musicDemo():
     fetch_yt_audio(url, name)
     playFile(name)
 
+def sixtelDemo():
+    matrix, w, h = img_pixel_matrix("dog.jpg", max_width=W)
+    
+    out = ["\033Pq"]
+    sixel_chars = ['@', 'A', 'C', 'G', 'O', '_']
+
+    for y_band in range(0, h, 6):
+        for sub_y in range(6):
+            actual_y = y_band + sub_y
+            if actual_y >= h:
+                break
+            for x in range(w):
+                r, g, b = matrix[actual_y][x]
+                r_pct = r * 100 // 255
+                g_pct = g * 100 // 255
+                b_pct = b * 100 // 255
+                out.append(f"#0;2;{r_pct};{g_pct};{b_pct}#0{sixel_chars[sub_y]}")
+            out.append("$")
+        out.append("-")
+    out.append("\033\\")
+    print("".join(out))
+
 def btopPy():
     """A python btop4win clone
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
@@ -1450,7 +1498,7 @@ def themeselect(themes = theme.ls()):
 if __name__ == "__main__":
     clear()
     #playFile("bg_music")
-    btopPy()
-    #cavaDemo()
+    #btopPy()
+    sixtelDemo()
     #themeselect()
     #main()
