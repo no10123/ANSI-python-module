@@ -89,6 +89,7 @@ DoubleX = True
 Debug = False
 
 BLOCKS = [" ", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+I_BLOCKS = [" ", "▔", "🮂", "🮃", "▀", "🮄", "🮅", "🮆", "█"]
 W, H = shutil.get_terminal_size()
 
 theme = ThemeEngine()
@@ -327,6 +328,47 @@ def cpu_graph(x:int, y:int, width:int, height:int, history:list, color, char:str
             elif int(7 * extra) != 0:
                 out.append(f"\x1b[{current_row};{x + col}H{color[min(row, len(color) - 1)]}{BLOCKS[int(7 * extra)]}\033[0m")
     return "".join(out)
+
+def dual_graph(x, y, width, height, c_up, c_down, color, char:str="█"):
+    if len(color[0]) == 1:
+        color = [color] * (height)
+    elif len(color) < height:
+        c = color
+        color = []
+        for i in range(height):
+            i = int(i // (height / len(c)))
+            color.append(c[i])
+    if width <= 0 or height <= 0: return ""
+    out = "color[min(row, len(color) - 1)]"
+    mid_y = (y + height) / 2
+    for i in range(max(len(c_up),len(c_down))):
+        if (y % 2) == 1:
+            out += f"\x1b[{math.ceil(mid_y)};{x + i}H{char}"
+        py, my, pe, me = 0, 0, 0, 0
+        if i < len(c_up) - 1:
+            py = int(c_up[i])
+            pe = c_up[i] - py
+        if i < len(c_down):
+            my = int(c_down[i])
+            me = c_down[i] - my
+        if int(7 * me) != 0:
+            out += f"\x1b[{math.ceil(mid_y) - j};{x + i}H{I_BLOCKS[int(me * 7)]}"
+        if my > 0: 
+            for j in range(my):
+                j += 1
+                out += f"\x1b[{math.ceil(mid_y) - j};{x + i}H{char}"
+        if py > 0:
+            for j in range(py):
+                j += 1
+                out += f"\x1b[{math.floor(mid_y) + j};{x + i}H{char}"
+        if int(7 * pe) != 0:
+            out += f"\x1b[{math.ceil(mid_y) - j};{x + i}H{BLOCKS[int(pe * 7)]}"
+        
+        out += "\033[0m"
+    return out
+        
+        
+        
 
 pygame.init()
 pygame.mixer.init()
@@ -1157,18 +1199,35 @@ def btopPy():
                 place(W-14-(4-len(str(ms))), 1, f'{bd("H", 2 if len(str(ms)) == 3 else 0, p["cpu_box"]) + bd("TR", CC=p["cpu_box"])}{ft("-")}{ft(f" {ms}ms ")}{ft("+")}')
                 clock_tick(int(padding_len/2) + 4, 1, p["title"], False, False, True, False)
                 if time.time() - lastUpdate < (ms/1000):
-                    place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=True)
-                    place(W-3, 1, bd(["TL","TR","BR","BL"], [1,10,W-2], CC=p["cpu_box"]), save=True)
+                    if not ["¹cpu"] == Windows:
+                        place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=True)
+                        place(W-3, 1, bd(["TL","TR","BR","BL"], [1,10,W-2], CC=p["cpu_box"]), save=True)
                     #place(1, 13,  bd(["TL","TR"], W-3, p["cpu_box"]), save=True)
                     print("\n"*(H-2))
                     return None
                 lastUpdate = time.time()
+                cpul = get_cpu_load()
+                cpu_cache.append(cpul)
+                IC = get_per_core_load()
+                GLA = get_load_averages()
                 if ["¹cpu"] == Windows:
-                    pass
+                    ey = 23
+                    ex = 40
+                    frame_buffer = []
+                    frame_buffer.append(clear_graph_area(1, 2, graph_w + ex, graph_h + ey))
+                    frame_buffer.append(cpu_graph(2, 2, graph_w + ex, graph_h + ey, cpu_cache, [p['cpu_start'],p['cpu_mid'],p['cpu_end']]))
+                    sys.stdout.write("".join(frame_buffer))
+                    sys.stdout.flush()
+                    place(W-35,4,f"CPU {generate_cpu_bar(cpul,24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(cpul):>3}%",save=True)
+                    for i in range(len(IC)):
+                        place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(IC[i]):>3}%",save=True)
+                    place(W-35,5+len(IC),f"Load AVG: {GLA[0]:>4.2f}  {GLA[1]:>4.2f}  {GLA[2]:>4.2f}")
+                
+                    # Draw boxes
+                    #place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33 + ey,6,1], p["cpu_box"]), save=False)
+                    #place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cpu_box"]), save=False)
+                    print()
                 elif "¹cpu" in Windows:
-                    cpul = get_cpu_load()
-                    cpu_cache.append(cpul)
-                    IC = get_per_core_load()
                     frame_buffer = []
                     frame_buffer.append(clear_graph_area(3, 2, graph_w, graph_h))
                     frame_buffer.append(cpu_graph(3, 2, graph_w, graph_h, cpu_cache, [p['cpu_start'],p['cpu_mid'],p['cpu_end']]))
@@ -1177,7 +1236,6 @@ def btopPy():
                     place(W-35,4,f"CPU {generate_cpu_bar(cpul,24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(cpul):>3}%",save=True)
                     for i in range(len(IC)):
                         place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(IC[i]):>3}%",save=True)
-                    GLA = get_load_averages()
                     place(W-35,5+len(IC),f"Load AVG: {GLA[0]:>4.2f}  {GLA[1]:>4.2f}  {GLA[2]:>4.2f}")
                 
                     # Draw boxes
