@@ -21,7 +21,8 @@ import yt_dlp
 import soundcard as sc
 import numpy as np
 import warnings
-from PIL import Image
+from PIL import Image, ImageSequence
+import cv2
 
 class RawTerminal():
     def __init__(self):
@@ -373,7 +374,9 @@ def dual_graph(x, y, width, height, c_up, c_down, color, char:str="█"):
 pygame.init()
 pygame.mixer.init()
 def playFile(name:str):
-    pygame.mixer.music.load(f"music/{name}.mp3")
+    if not pygame.mixer.get_init():
+        pygame.mixer.init()
+    pygame.mixer.music.load(f"downloads/{name}")
     pygame.mixer.music.play(-1)
 
 #non standard inputs
@@ -383,7 +386,7 @@ def fetch_yt_audio(url:str, name:str="music"):
     #yt-dlp config
     ydl_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': f'music/{name}.%(ext)s',
+        'outtmpl': f'downloads/{name}.%(ext)s',
         'quiet': True,
         'no_warnings': True,
         'postprocessors': [{
@@ -398,7 +401,52 @@ def fetch_yt_audio(url:str, name:str="music"):
         ydl.download([url])
     
     print("Download complete.")
-    return f"{output_name}.mp3"
+    return f"downloads/{name}.mp3"
+
+def fetch_yt_video(url: str, name: str = "video", audio:bool=True):
+    """YT url -> .mp4"""
+    
+    # yt-dlp config for MP4 video
+    ydl_opts = {
+        'format': 'bestvideo+bestaudio/best',
+        'merge_output_format': 'mp4',
+        'outtmpl': f'downloads/{name}.%(ext)s',
+        'quiet': True,
+        'no_warnings': True,
+    }
+
+    print(f"Fetching video from {url}...")
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        print("Download complete.")
+        return f"videos/{name}.mp4"
+    except Exception as e:
+        print(f"error: {e}")
+        return None
+
+def matrix_to_sixel(matrix, w, h, sx=1, sy=1):
+    """[(r,g,b)...] -> 'sixtel'"""
+    sixel_chars = ['@', 'A', 'C', 'G', 'O', '_']
+    payload = [f"\033[{sy};{sx}H\033Pq"]
+    
+    for y_band in range(0, h, 6):
+        for sub_y in range(6):
+            actual_y = y_band + sub_y
+            if actual_y >= h:
+                break
+                
+            for x in range(w):
+                r, g, b = matrix[actual_y][x]
+                r_pct = r * 100 // 255
+                g_pct = g * 100 // 255
+                b_pct = b * 100 // 255
+                payload.append(f"#0;2;{r_pct};{g_pct};{b_pct}#0{sixel_chars[sub_y]}")
+            payload.append("$")
+        payload.append("-")
+        
+    payload.append("\033\\")
+    return "".join(payload)
 
 def img_pixel_matrix(path, max_width=None, sharpen=False):
     """takes img, and converts it to array"""
@@ -427,6 +475,97 @@ def img_pixel_matrix(path, max_width=None, sharpen=False):
         matrix.append(row)
 
     return matrix, w, h
+
+def img(path, mw=None, sx=1, sy=1, sharpen=False):
+    """Draws a static image instantly at targeted coordinates"""
+    matrix, w, h = img_pixel_matrix(path, max_width=mw, sharpen=sharpen)
+    if matrix:
+        sys.stdout.write(matrix_to_sixel(matrix, w, h, sx, sy))
+        sys.stdout.flush()
+
+def GIF(path, mw=None, sx=0, sy=0, speed=10):
+    """Plays a GIF smoothly"""
+    try:
+        gif = Image.open(path)
+    except Exception as e:
+        print(f"Error loading GIF: {e}")
+        return
+
+    print("\033[?25l")
+
+    try:
+        while True:
+            for frame in ImageSequence.Iterator(gif):
+                start_frame_time = time.time()
+                duration = frame.info.get('duration', speed) / 1000.0
+                frame = frame.convert('RGB')
+                w, h = frame.size
+                aspect = h / w
+                
+                if mw: w = mw
+                h = int(w * aspect)
+                frame = frame.resize((w, h), Image.Resampling.NEAREST)
+                img_data = frame.load()
+                matrix = [[img_data[x, y] for x in range(w)] for y in range(h)]
+                
+                sys.stdout.write(matrix_to_sixel(matrix, w, h, sx, sy))
+                sys.stdout.flush()
+                
+                elapsed = time.time() - start_frame_time
+                if elapsed < duration:
+                    time.sleep(duration - elapsed)
+    except KeyboardInterrupt:
+        print("\033[?25h") # Show cursor
+
+def video(path, mw=None, sx=1, sy=1):
+    """Plays a video file smoothly"""
+    cap = cv2.VideoCapture(path)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_delay = 1.0 / fps
+
+    try:
+        while cap.isOpened():
+            start_time = time.time()
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, _ = frame_rgb.shape
+            aspect = h / w
+            
+            if mw: w = mw
+            h = int(w * aspect)
+            pil_img = Image.fromarray(frame_rgb).resize((w, h), Image.Resampling.NEAREST)
+            img_data = pil_img.load()
+            matrix = [[img_data[x, y] for x in range(w)] for y in range(h)]
+            
+            sixel_str = matrix_to_sixel(matrix, w, h, sx, sy)
+            sys.stdout.write(sixel_str)
+            sys.stdout.flush()
+            
+            elapsed = time.time() - start_time
+            if elapsed < frame_delay:
+                time.sleep(frame_delay - elapsed)
+    finally:
+        cap.release()
+
+def loadFile(path, mw=None, sx=1, sy=1):
+    """a verry fancy func"""
+    f_img   = [".png",".jpg",".jfif"]
+    f_video = [".mp4"]
+    f_GIF   = [".gif"]
+    f_audio = [".mp3"]
+
+    name, file_type = path.slice(".")[1]
+    if file_type in f_img:
+        img(path, mw, sx, sy)
+    elif file_type in f_GIF:
+        GIF(path, mw, sx, sy)
+    elif file_type in f_video:
+        video(path, mw, sx, sy)
+    elif file_type in f_audio:
+        playFile(name.slice("/")[1:])
 
 TARGET_VID = 0x1A2C
 TARGET_PID = 0x4DBC
@@ -1056,6 +1195,20 @@ def musicDemo():
     fetch_yt_audio(url, name)
     playFile(name)
 
+def ytDemo():
+    url = input("url: ")
+    ap = fetch_yt_audio(url, "0").slice("/")[1:]
+    vp = fetch_yt_video(url, "0")
+    t1 = threading.Thread(target=video, kwargs={"mw": 300, "path": vp},daemon=True)
+    t2 = threading.Thread(target=playFile, kwargs={"name": ap},daemon=True)
+    t1.start()
+    t2.start()
+    try:
+        while t1.is_alive():
+            t1.join(timeout=1.0)
+    except KeyboardInterrupt:
+        print("\nStopping...")
+
 def sixtelDemo():
     matrix, w, h = img_pixel_matrix("imgs/moon-beach.png", W * 6)
     
@@ -1330,7 +1483,6 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 def strip_ansi(s):
     return ANSI.sub("", s)
 
-
 def themeDemo(t="nord"):
     """ANSI theme preview table (proper alignment)"""
 
@@ -1496,10 +1648,22 @@ def themeselect(themes = theme.ls()):
                 i = (i - 1) % len(themes)
         print(favroites)
 
+rlock = threading.Lock()
 if __name__ == "__main__":
     clear()
     #playFile("bg_music")
     #btopPy()
-    sixtelDemo()
+    #sixtelDemo()
     #themeselect()
     #main()
+    ap = "music.mp3"
+    vp = "downloads/video.mp4"
+    t1 = threading.Thread(target=video, kwargs={"mw": 300, "path": vp},daemon=True)
+    t2 = threading.Thread(target=playFile, kwargs={"name": ap},daemon=True)
+    t1.start()
+    t2.start()
+    try:
+        while t1.is_alive():
+            t1.join(timeout=1.0)
+    except KeyboardInterrupt:
+        print("\nStopping...")
