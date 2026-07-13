@@ -24,6 +24,10 @@ import warnings
 from PIL import Image, ImageSequence
 import cv2
 from functools import wraps
+import base64
+from io import BytesIO
+import mss
+import pygetwindow as gw
 
 class RawTerminal():
     def __init__(self):
@@ -434,6 +438,8 @@ def fetch_yt_video(url: str, name: str = "video", audio:bool=True):
         print(f"error: {e}")
         return None
 
+# sixel
+
 def matrix_to_sixel(matrix, w, h, sx=1, sy=1):
     """[(r,g,b)...] -> 'sixtel'"""
     sixel_chars = ['@', 'A', 'C', 'G', 'O', '_']
@@ -526,23 +532,14 @@ def GIF(path, mw=None, sx=0, sy=0, speed=10):
     except KeyboardInterrupt:
         print("\033[?25h") # Show cursor
 
-def video(path, mw=None, sx=1, sy=1):
-    """Plays a video file smoothly"""
+def video(path, mw=60, sx=1, sy=1, protocol="kitty"):
+    """Plays a video file smoothly using Kitty or Sixel"""
     cap = cv2.VideoCapture(path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_delay = 1.0 / fps
 
     try:
         while cap.isOpened():
-            if control.paused:
-                time.sleep(0.1)
-                continue
-            if control.seek_frame != 0:
-                current_frame = cap.get(cv2.CAP_PROP_POS_FRAMES)
-                new_frame = max(0, current_frame + control.seek_frame)
-                cap.set(cv2.CAP_PROP_POS_FRAMES, new_frame)
-                control.seek_frame = 0
-            
             start_time = time.time()
             ret, frame = cap.read()
             if not ret: break
@@ -553,12 +550,17 @@ def video(path, mw=None, sx=1, sy=1):
             
             if mw: w = mw
             h = int(w * aspect)
+
             pil_img = Image.fromarray(frame_rgb).resize((w, h), Image.Resampling.NEAREST)
-            img_data = pil_img.load()
-            matrix = [[img_data[x, y] for x in range(w)] for y in range(h)]
+            if protocol == "kitty":
+                render_str = k_img(pil_img, sx, sy)
+            else:
+                # Fallback to Sixel
+                img_data = pil_img.load()
+                matrix = [[img_data[x, y] for x in range(w)] for y in range(h)]
+                render_str = matrix_to_sixel(matrix, w, h, sx, sy)
             
-            sixel_str = matrix_to_sixel(matrix, w, h, sx, sy)
-            sys.stdout.write(sixel_str)
+            sys.stdout.write(render_str)
             sys.stdout.flush()
             
             elapsed = time.time() - start_time
@@ -583,6 +585,76 @@ def loadFile(path, mw=None, sx=1, sy=1):
         video(path, mw, sx, sy)
     elif file_type in f_audio:
         playFile(path)
+
+# kitty stuff
+
+def k_img(img, sx=1, sy=1):
+    """img to kitty so makes imgs look way better in terminal"""
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    png_data = buffer.getvalue()
+    b64_data = base64.standard_b64encode(png_data).decode('ascii')
+    payload = [f"\033[{sy};{sx}H"]
+    chunk_size = 4096
+    for i in range(0, len(b64_data), chunk_size):
+        chunk = b64_data[i:i+chunk_size]
+        m = 1 if i + chunk_size < len(b64_data) else 0
+        if i == 0:
+            payload.append(f"\033_Ga=T,f=100,m={m};{chunk}\033\\")
+        else:
+            payload.append(f"\033_Gm={m};{chunk}\033\\")
+    return "".join(payload)
+
+def stream_screen(name=None, mw=80, fps=20):
+    """should make terminal mirror a portion of your screen"""
+    frame_delay = 1.0 / fps
+    
+    print("\033[2J\033[?25l")
+    
+    with mss.mss() as sct:
+        try:
+            while True:
+                start_time = time.time()
+                if name:
+                    windows = gw.getWindowsWithTitle(name)
+
+                    if not windows:
+                        sys.stdout.write(f"\r\033[K[!] an error with {name}\n probably minimized.")
+                        sys.stdout.flush()
+                        time.sleep(1)
+                        continue
+                
+                win = windows[0]
+                capture_box = {
+                    'top': win.top + 2, 
+                    'left': win.left + 7, 
+                    'width': max(1, win.width - 14), 
+                    'height': max(1, win.height - 9)
+                }
+                if capture_box['width'] <= 1 or capture_box['height'] <= 1:
+                    time.sleep(0.1)
+                    continue
+                sct_img = sct.grab(capture_box)
+                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                
+                aspect = img.height / img.width
+                h = int(mw * aspect)
+                img = img.resize((mw, h), Image.Resampling.LANCZOS)
+                kitty_str = k_img(img, sx=1, sy=3)
+                header = f"\033[1;1H\033[K[\033[1m {win.title} \033[0m]"
+                
+                sys.stdout.write(header + kitty_str)
+                sys.stdout.flush()
+                
+                elapsed = time.time() - start_time
+                if elapsed < frame_delay:
+                    time.sleep(frame_delay - elapsed)
+                    
+        except KeyboardInterrupt:
+            print("\n" * 15 + "\033[?25h\nstopped...")
+
+
+# more fancy stuff
 
 class mediaControl:
     def __init__(self):
@@ -1706,6 +1778,10 @@ def themeselect(themes = theme.ls()):
         print(favroites)
 
 rlock = threading.Lock()
+#fetch_yt_audio("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
+#fetch_yt_video("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
+stream_screen("Notepad", 500)
+input()
 if __name__ == "__main__":
     clear()
     #playFile("bg_music")
@@ -1715,9 +1791,10 @@ if __name__ == "__main__":
     #main()
     global skip
     skip = 15
-    ap = "downloads/music.mp3"
-    vp = "downloads/video.mp4"
-    t1 = threading.Thread(target=video, kwargs={"mw": 300, "path": vp},daemon=True)
+    name = "ex"
+    ap = f"downloads/{name}.mp3"
+    vp = f"downloads/{name}.mp4"
+    t1 = threading.Thread(target=video, kwargs={"mw": 500, "path": vp},daemon=True)
     t2 = threading.Thread(target=playFile, kwargs={"path": ap},daemon=True)
     t3 = threading.Thread(
     target=floop,
