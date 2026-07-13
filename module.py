@@ -23,6 +23,7 @@ import numpy as np
 import warnings
 from PIL import Image, ImageSequence
 import cv2
+from functools import wraps
 
 class RawTerminal():
     def __init__(self):
@@ -373,11 +374,19 @@ def dual_graph(x, y, width, height, c_up, c_down, color, char:str="█"):
 
 pygame.init()
 pygame.mixer.init()
-def playFile(name:str):
+def playFile(path:str):
     if not pygame.mixer.get_init():
         pygame.mixer.init()
-    pygame.mixer.music.load(f"downloads/{name}")
+    pygame.mixer.music.load(path)
     pygame.mixer.music.play(-1)
+    while pygame.mixer.music.get_busy():
+        if control.paused:
+            if pygame.mixer.music.get_busy():
+                pygame.mixer.music.pause()
+            while control.paused:
+                time.sleep(0.1)
+            pygame.mixer.music.unpause()
+        time.sleep(0.1)
 
 #non standard inputs
 # fancy stuff
@@ -525,10 +534,18 @@ def video(path, mw=None, sx=1, sy=1):
 
     try:
         while cap.isOpened():
+            if control.paused:
+                time.sleep(0.1)
+                continue
+            if control.seek_frame != 0:
+                current_frame = cap.get(cv2.CAP_PROP_POS_FRAMES)
+                new_frame = max(0, current_frame + control.seek_frame)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, new_frame)
+                control.seek_frame = 0
+            
             start_time = time.time()
             ret, frame = cap.read()
-            if not ret:
-                break
+            if not ret: break
 
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w, _ = frame_rgb.shape
@@ -557,7 +574,7 @@ def loadFile(path, mw=None, sx=1, sy=1):
     f_GIF   = [".gif"]
     f_audio = [".mp3"]
 
-    name, file_type = path.slice(".")[1]
+    file_type = path.slice(".")[1]
     if file_type in f_img:
         img(path, mw, sx, sy)
     elif file_type in f_GIF:
@@ -565,7 +582,23 @@ def loadFile(path, mw=None, sx=1, sy=1):
     elif file_type in f_video:
         video(path, mw, sx, sy)
     elif file_type in f_audio:
-        playFile(name.slice("/")[1:])
+        playFile(path)
+
+class mediaControl:
+    def __init__(self):
+        self.paused = False
+        self.seek_frame = 0
+        self.lock = threading.Lock()
+    def pause(self):
+        with self.lock:
+            self.paused = not self.paused
+            #print(f"\n{self.paused=}")
+    def seek(self, n):
+        with self.lock:
+            print(f"\n{n=}")
+            self.seek_frame = n
+
+control = mediaControl()
 
 TARGET_VID = 0x1A2C
 TARGET_PID = 0x4DBC
@@ -652,7 +685,22 @@ def char_available():
         dr, _, _ = select.select([sys.stdin], [], [], 0)
         return bool(dr)
 
-def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis=True, inputs:list=["keyboard","mouse","arrows","ESC","controller"],drag:bool=False):
+def f_out(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        data = kwargs.get("custom_out", {})
+        result = func(*args, **kwargs)
+        if data:
+            for key, value in result.items():
+                values = value if isinstance(value, list) else [value]
+                for item in values:
+                    if item in data:
+                        exec(data[item], {"key": key, "value": item, "result": result}, globals())
+        return result
+    return wrapper
+
+@f_out
+def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis=True, inputs:list=["keyboard","mouse","arrows","ESC","controller"],drag:bool=False, custom_out:dict={}):
     """Fancy input, input that allows mouse inputs."""
     sys.stdout.write(prompt)
     sys.stdout.write(ENABLE_MOUSE_D if drag else ENABLE_MOUSE)
@@ -928,6 +976,15 @@ catppuccin_mocha_rgb = {
     "crust": (17, 17, 27),
 }
 
+def floop(func, args = (), kwargs = None):
+    if kwargs is None:
+        kwargs = {}
+    while True:
+        func(*args, **kwargs)
+
+def reset_audio():
+    pygame.mixer.quit()
+    pygame.mixer.init()
 C = Canvas()
 
 # DEMOS
@@ -1197,10 +1254,10 @@ def musicDemo():
 
 def ytDemo():
     url = input("url: ")
-    ap = fetch_yt_audio(url, "0").slice("/")[1:]
+    ap = fetch_yt_audio(url, "0")
     vp = fetch_yt_video(url, "0")
     t1 = threading.Thread(target=video, kwargs={"mw": 300, "path": vp},daemon=True)
-    t2 = threading.Thread(target=playFile, kwargs={"name": ap},daemon=True)
+    t2 = threading.Thread(target=playFile, kwargs={"path": ap},daemon=True)
     t1.start()
     t2.start()
     try:
@@ -1656,12 +1713,24 @@ if __name__ == "__main__":
     #sixtelDemo()
     #themeselect()
     #main()
-    ap = "music.mp3"
+    global skip
+    skip = 15
+    ap = "downloads/music.mp3"
     vp = "downloads/video.mp4"
     t1 = threading.Thread(target=video, kwargs={"mw": 300, "path": vp},daemon=True)
-    t2 = threading.Thread(target=playFile, kwargs={"name": ap},daemon=True)
+    t2 = threading.Thread(target=playFile, kwargs={"path": ap},daemon=True)
+    t3 = threading.Thread(
+    target=floop,
+    kwargs={
+        "func": finput,
+        "kwargs": {"max_length": 1,"inputs": ["keyboard", "arrows"],
+            "custom_out": {
+                " ": "control.pause()",
+                "LEFT": f"control.seek({-skip})",
+                "RIGHT": f"control.seek({skip})",},},},daemon=True,)
     t1.start()
     t2.start()
+    t3.start()
     try:
         while t1.is_alive():
             t1.join(timeout=1.0)
