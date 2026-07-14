@@ -28,6 +28,13 @@ import base64
 from io import BytesIO
 import mss
 import pygetwindow as gw
+import pygetwindow as gw
+import win32gui
+import win32ui
+from ctypes import windll
+import win32api
+import win32con
+from spotlight import *
 
 class RawTerminal():
     def __init__(self):
@@ -605,54 +612,104 @@ def k_img(img, sx=1, sy=1):
             payload.append(f"\033_Gm={m};{chunk}\033\\")
     return "".join(payload)
 
-def stream_screen(name=None, mw=80, fps=20):
-    """should make terminal mirror a portion of your screen"""
-    frame_delay = 1.0 / fps
-    
-    print("\033[2J\033[?25l")
-    
-    with mss.mss() as sct:
-        try:
-            while True:
-                start_time = time.time()
-                if name:
-                    windows = gw.getWindowsWithTitle(name)
+def get_window_image(hwnd):
+    """asks Windows to render the window to a memory buffer"""
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    width = right - left
+    height = bottom - top
 
-                    if not windows:
-                        sys.stdout.write(f"\r\033[K[!] an error with {name}\n probably minimized.")
-                        sys.stdout.flush()
-                        time.sleep(1)
-                        continue
-                
-                win = windows[0]
-                capture_box = {
-                    'top': win.top + 2, 
-                    'left': win.left + 7, 
-                    'width': max(1, win.width - 14), 
-                    'height': max(1, win.height - 9)
-                }
-                if capture_box['width'] <= 1 or capture_box['height'] <= 1:
-                    time.sleep(0.1)
-                    continue
-                sct_img = sct.grab(capture_box)
-                img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                
+    if width <= 0 or height <= 0:
+        return None
+    
+    hwndDC = win32gui.GetWindowDC(hwnd)
+    mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
+    saveDC = mfcDC.CreateCompatibleDC()
+
+    saveBitMap = win32ui.CreateBitmap()
+    saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
+    saveDC.SelectObject(saveBitMap)
+
+    result = windll.user32.PrintWindow(hwnd, saveDC.GetSafeHdc(), 3)
+
+    img = None
+    if result == 1:
+        # bitmap -> PIL img
+        bmpinfo = saveBitMap.GetInfo()
+        bmpstr = saveBitMap.GetBitmapBits(True)
+        img = Image.frombuffer(
+            'RGB', 
+            (bmpinfo['bmWidth'], bmpinfo['bmHeight']), 
+            bmpstr, 'raw', 'BGRX', 0, 1
+        )
+    # clean up
+    win32gui.DeleteObject(saveBitMap.GetHandle())
+    saveDC.DeleteDC()
+    mfcDC.DeleteDC()
+    win32gui.ReleaseDC(hwnd, hwndDC)
+
+    return img
+
+def stream_window(name, mw=80, fps=20):
+    frame_delay = 1.0 / fps
+    print("\033[2J\033[?25l") 
+    print(f"Waiting for window: '{name}'...")
+    
+    try:
+        while True:
+            start_time = time.time()
+            
+            windows = gw.getWindowsWithTitle(name)
+            if not windows:
+                sys.stdout.write(f"\r\033[K[!] Lost track of '{name}'. Waiting...")
+                sys.stdout.flush()
+                time.sleep(1)
+                continue
+            
+            win = windows[0]
+            hwnd = win._hWnd 
+
+            img = get_window_image(hwnd)
+            
+            if img:
                 aspect = img.height / img.width
                 h = int(mw * aspect)
                 img = img.resize((mw, h), Image.Resampling.LANCZOS)
+                
                 kitty_str = k_img(img, sx=1, sy=3)
                 header = f"\033[1;1H\033[K[\033[1m {win.title} \033[0m]"
                 
                 sys.stdout.write(header + kitty_str)
                 sys.stdout.flush()
+            
+            elapsed = time.time() - start_time
+            if elapsed < frame_delay:
+                time.sleep(frame_delay - elapsed)
                 
-                elapsed = time.time() - start_time
-                if elapsed < frame_delay:
-                    time.sleep(frame_delay - elapsed)
-                    
-        except KeyboardInterrupt:
-            print("\n" * 15 + "\033[?25h\nstopped...")
+    except KeyboardInterrupt:
+        print("\033[?25h\n\nStream stopped.")
 
+def stream_screen(x,y,w,h,mw=80,fps=20):
+    pass
+
+def send_mouse_click(hwnd, tui_x, tui_y, terminal_w, terminal_h, win_rect):
+    """mapper."""
+    win_w = win_rect[2] - win_rect[0]
+    win_h = win_rect[3] - win_rect[1]
+
+    scale_x = win_w / terminal_w
+    scale_y = win_h / terminal_h
+    
+    # coordinates
+    lparam = win32api.MAKELONG(int(tui_x * scale_x), int(tui_y * scale_y))
+    
+    # send
+    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam)
+    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam)
+
+def send_key_press(hwnd, vk_code):
+    """key presses."""
+    win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, 0)
+    win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, 0)
 
 # more fancy stuff
 
@@ -768,6 +825,11 @@ def f_out(func):
                 for item in values:
                     if item in data:
                         exec(data[item], {"key": key, "value": item, "result": result}, globals())
+                if key in data:
+                    try:
+                        exec(data[key], {"key": key, "value": item, "result": result}, globals())
+                    except Exception as e:
+                            print(f"\n[!] error: {key}: {e}")
         return result
     return wrapper
 
@@ -1048,11 +1110,17 @@ catppuccin_mocha_rgb = {
     "crust": (17, 17, 27),
 }
 
-def floop(func, args = (), kwargs = None):
+def floop(func, args = (), kwargs = None, raw=True):
     if kwargs is None:
         kwargs = {}
-    while True:
-        func(*args, **kwargs)
+    if raw:
+        with RawTerminal():
+            while True:
+                func(*args, **kwargs)
+    else:
+        while True:
+            func(*args, **kwargs)
+
 
 def reset_audio():
     pygame.mixer.quit()
@@ -1338,27 +1406,31 @@ def ytDemo():
     except KeyboardInterrupt:
         print("\nStopping...")
 
-def sixtelDemo():
-    matrix, w, h = img_pixel_matrix("imgs/moon-beach.png", W * 6)
-    
-    out = ["\033Pq"]
-    sixel_chars = ['@', 'A', 'C', 'G', 'O', '_']
-
-    for y_band in range(0, h, 6):
-        for sub_y in range(6):
-            actual_y = y_band + sub_y
-            if actual_y >= h:
-                break
-            for x in range(w):
-                r, g, b = matrix[actual_y][x]
-                r_pct = r * 100 // 255
-                g_pct = g * 100 // 255
-                b_pct = b * 100 // 255
-                out.append(f"#0;2;{r_pct};{g_pct};{b_pct}#0{sixel_chars[sub_y]}")
-            out.append("$")
-        out.append("-")
-    out.append("\033\\")
-    print("".join(out))
+def videoDemo():
+    global skip
+    skip = 15
+    name = "ex"
+    ap = f"downloads/{name}.mp3"
+    vp = f"downloads/{name}.mp4"
+    t1 = threading.Thread(target=video, kwargs={"mw": 500, "path": vp},daemon=True)
+    t2 = threading.Thread(target=playFile, kwargs={"path": ap},daemon=True)
+    t3 = threading.Thread(
+    target=floop,
+    kwargs={
+        "func": finput,
+        "kwargs": {"max_length": 1,"inputs": ["keyboard", "arrows"],
+            "custom_out": {
+                " ": "control.pause()",
+                "LEFT": f"control.seek({-skip})",
+                "RIGHT": f"control.seek({skip})",},},},daemon=True,)
+    t1.start()
+    t2.start()
+    t3.start()
+    try:
+        while t1.is_alive():
+            t1.join(timeout=1.0)
+    except KeyboardInterrupt:
+        print("\nStopping...")
 
 def btopPy():
     """A python btop4win clone
@@ -1780,8 +1852,8 @@ def themeselect(themes = theme.ls()):
 rlock = threading.Lock()
 #fetch_yt_audio("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
 #fetch_yt_video("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
-stream_screen("Notepad", 500)
-input()
+
+
 if __name__ == "__main__":
     clear()
     #playFile("bg_music")
@@ -1789,27 +1861,26 @@ if __name__ == "__main__":
     #sixtelDemo()
     #themeselect()
     #main()
-    global skip
-    skip = 15
-    name = "ex"
-    ap = f"downloads/{name}.mp3"
-    vp = f"downloads/{name}.mp4"
-    t1 = threading.Thread(target=video, kwargs={"mw": 500, "path": vp},daemon=True)
-    t2 = threading.Thread(target=playFile, kwargs={"path": ap},daemon=True)
-    t3 = threading.Thread(
-    target=floop,
-    kwargs={
-        "func": finput,
-        "kwargs": {"max_length": 1,"inputs": ["keyboard", "arrows"],
-            "custom_out": {
-                " ": "control.pause()",
-                "LEFT": f"control.seek({-skip})",
-                "RIGHT": f"control.seek({skip})",},},},daemon=True,)
-    t1.start()
-    t2.start()
-    t3.start()
-    try:
-        while t1.is_alive():
-            t1.join(timeout=1.0)
-    except KeyboardInterrupt:
-        print("\nStopping...")
+    target = "steam"
+    global mw, h
+    mw = 500
+    h = 40
+
+    windows = gw.getWindowsWithTitle(target)
+    if windows:
+        hwnd = windows[0]._hWnd
+        t = threading.Thread(target=floop, kwargs={"func": finput,
+        "kwargs": {"inputs": ["keyboard", "mouse", "ESC"],
+            "custom_out": {"mouse":"""
+                           win32gui.SetForegroundWindow(hwnd)
+                           action, btn_name, t_col, t_row = value
+                           rect = win32gui.GetWindowRect(hwnd)
+                           send_mouse_click(hwnd, int(t_col), int(t_row), mw, h, rect)
+                           """, "keyboard":"""
+                            for char in result["keyboard"]:
+                                vk_code = ord(char.upper()) 
+                                send_key_press(hwnd, vk_code)                           
+                            """, "ESC": """os._exit()"""},},},daemon=True)
+        t.start()
+
+        stream_window(target, mw, 15)
