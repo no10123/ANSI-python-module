@@ -729,6 +729,57 @@ class mediaControl:
 
 control = mediaControl()
 
+class createQuiz():
+    def __init__(self, c=[]):
+        self.length = 0
+        self.score = 0
+        self.questions = []
+        self.colors = c
+    def colorPalate(self, c):
+        self.colors = c
+    def add(self, type, prompt, answer, settings):
+        self.questions.append([type, prompt, answer, settings])
+    def start(self):
+        for i in self.questions:
+            t, p, a, s = i
+            if t.lower() in ["mc","multiple choice"]:
+                correct = ""
+                print(p)
+                k, v, m, ex = [a.get(key,d) for key, d in [("k","error"), ("v","error"), ("m",100/len(self.questions)), ("ex",None)]]
+                if k == "error" or v == "error":
+                    input("[!] Error.\n> ")
+                    continue
+                for i in range(len(k)):
+                    print(k[i])
+                    if v[i]: correct = k[i]
+                while True:
+                    i = input("")
+                    if i in k:
+                        break
+                    else:
+                        print(end=f"\033[1A\033[k")
+                if i  == correct:
+                    print("correct. :)")
+                    if ex: print(ex)
+                else:
+                    print("incorrect.")
+                    if ex: print(ex)
+                self.score += m[k.index(i)]
+    def score(self,total=100,p=70,per=True):
+        if per:
+            print(f"score: {self.score / total}%")
+            if (self.score / total) > p:
+                print("you passed.")
+            else:
+                print("you no pass.")
+
+quiz = createQuiz()
+quiz.add("mc","1 + 1 = ",{"k":["1","2","3","4"],"v":[False,True,False,False],[0,1,0,0],[None,None,None,None]})
+quiz.start()
+quiz.score()
+input("quit")
+quit()
+
 TARGET_VID = 0x1A2C
 TARGET_PID = 0x4DBC
 
@@ -1432,6 +1483,24 @@ def videoDemo():
     except KeyboardInterrupt:
         print("\nStopping...")
 
+def slideshowDemo(folder="./wallpapers",t=3):
+    i = 1
+    while True:
+        img = os.path.join(folder, f"{i}.jpg")
+        if os.path.exists(img):
+            sys.stdout.write(f"\033[1;1H\033[KWallpaper: {i}.jpg\n\n")
+            img = Image.open(f"wallpapers/{i}.jpg")
+            aspect = img.height / img.width
+            img = img.resize((700, int(700 * aspect * 0.5)), Image.Resampling.LANCZOS)
+
+            sys.stdout.write(k_img(img,sy=3+int(700 * aspect * 0.5) * i))
+            sys.stdout.flush()
+            time.sleep(t) 
+            i += 1
+        else:
+            # loop
+            i = 1
+
 def btopPy():
     """A python btop4win clone
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
@@ -1853,7 +1922,8 @@ rlock = threading.Lock()
 #fetch_yt_audio("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
 #fetch_yt_video("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
 
-
+clear()
+slideshowDemo(t=0.1)
 if __name__ == "__main__":
     clear()
     #playFile("bg_music")
