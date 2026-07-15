@@ -749,6 +749,40 @@ class createQuiz():
                 if k == "error" or v == "error":
                     input("[!] Error.\n> ")
                     continue
+                
+                if isinstance(v,int):
+                    v = [v]
+                if isinstance(v,list) and v and isinstance(v[0],int):
+                    v = [k[i] for i in v]
+                if isinstance(v,str):
+                    v = [v]
+                if isinstance(v,list) and v and isinstance(v[0],str):
+                    v = [i in v for i in k]
+                
+                if isinstance(m,int) or isinstance(m,float):
+                    m = [0,m]
+                if isinstance(m,dict):
+                    m = [m.get(v[i]) for i in range(len(v))]
+                elif isinstance(m,list) and len(m) != len(v):
+                    m = [max(m) if v[i] else min(m) for i in range(len(v))]
+                
+                if isinstance(ex,str) or ex in [None, False]:
+                    ex = [ex] * len(v)
+                elif isinstance(ex,dict):
+                    ex = [ex.get(k[i]) for i in range(len(k))]
+                elif isinstance(ex,tuple):
+                    match len(ex):
+                        case 1:
+                            ex = [ex[0]] * len(v)
+                        case 2:
+                            if isinstance(ex[0],list):
+                                ex = [ex[1] if i in ex[0] else None for i in (p if isinstance(ex[0][p],int) else k[p] for p in range(len(ex[0])))] + [None] * (len(v) - len(ex[0]))
+                            if isinstance(ex[0],int):
+                                ex = [ex[1] if i == ex[0] else None for i in range(len(v))]
+                            elif isinstance(ex[0],str):
+                                ex = [ex[1] if i == ex[0] else None for i in k]
+
+                
                 for i in range(len(k)):
                     print(k[i])
                     if v[i]: correct = k[i]
@@ -757,26 +791,28 @@ class createQuiz():
                     if i in k:
                         break
                     else:
-                        print(end=f"\033[1A\033[k")
+                        print(end=f"\033[1A\033[K")
                 if i  == correct:
                     print("correct. :)")
-                    if ex: print(ex)
+                    if ex[k.index(i)]: print(ex[k.index(i)])
                 else:
                     print("incorrect.")
-                    if ex: print(ex)
+                    if ex[k.index(i)]: print(ex[k.index(i)])
                 self.score += m[k.index(i)]
-    def score(self,total=100,p=70,per=True):
+    def result(self,total=100,p=70,per=True):
         if per:
-            print(f"score: {self.score / total}%")
-            if (self.score / total) > p:
+            s = 100 * (self.score / total)
+            print(f"score: {s}%")
+            if s > p:
                 print("you passed.")
             else:
                 print("you no pass.")
 
+clear()
 quiz = createQuiz()
-quiz.add("mc","1 + 1 = ",{"k":["1","2","3","4"],"v":[False,True,False,False],[0,1,0,0],[None,None,None,None]})
+quiz.add("mc","1 + 1 = ",{"k":["1","2","3","4"],"v":"2"},[])
 quiz.start()
-quiz.score()
+quiz.result()
 input("quit")
 quit()
 
