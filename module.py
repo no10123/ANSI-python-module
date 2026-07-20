@@ -28,13 +28,14 @@ import base64
 from io import BytesIO
 import mss
 import pygetwindow as gw
-import pygetwindow as gw
 import win32gui
 import win32ui
-from ctypes import windll
 import win32api
 import win32con
 from spotlight import *
+import ctypes
+from ctypes import wintypes, windll
+from displays import *
 
 class RawTerminal():
     def __init__(self):
@@ -380,7 +381,9 @@ def dual_graph(x, y, width, height, c_up, c_down, color, char:str="█"):
         out += "\033[0m"
     return out
         
-        
+def iprint(msgs:list, end:str="\n", lend:str=""):
+    for i in msgs:
+        print(i,end=(end if i == msgs[-1] else lend))
         
 
 pygame.init()
@@ -401,6 +404,36 @@ def playFile(path:str):
 
 #non standard inputs
 # fancy stuff
+
+def get_char_at_cursor():
+    STD_OUTPUT_HANDLE = -11
+    handle = ctypes.windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+    class COORD(ctypes.Structure):
+        _fields_ = [("X", wintypes.SHORT), ("Y", wintypes.SHORT)]
+        
+    class CONSOLE_SCREEN_BUFFER_INFO(ctypes.Structure):
+        _fields_ = [("dwSize", COORD),
+                    ("dwCursorPosition", COORD),
+                    ("wAttributes", wintypes.WORD),
+                    ("srWindow", wintypes.SMALL_RECT),
+                    ("dwMaximumWindowSize", COORD)]
+                    
+    csbi = CONSOLE_SCREEN_BUFFER_INFO()
+    ctypes.windll.kernel32.GetConsoleScreenBufferInfo(handle, ctypes.byref(csbi))
+    cursor_pos = csbi.dwCursorPosition
+    char_buffer = ctypes.create_unicode_buffer(1)
+    chars_read = wintypes.DWORD()
+    
+    ctypes.windll.kernel32.ReadConsoleOutputCharacterW(
+        handle, 
+        char_buffer, 
+        1, 
+        cursor_pos, 
+        ctypes.byref(chars_read)
+    )
+    
+    return char_buffer.value
+
 def fetch_yt_audio(url:str, name:str="music"):
     """converts YT link to .mp3 audio"""
     #yt-dlp config
@@ -445,272 +478,6 @@ def fetch_yt_video(url: str, name: str = "video", audio:bool=True):
         print(f"error: {e}")
         return None
 
-# sixel
-
-def matrix_to_sixel(matrix, w, h, sx=1, sy=1):
-    """[(r,g,b)...] -> 'sixtel'"""
-    sixel_chars = ['@', 'A', 'C', 'G', 'O', '_']
-    payload = [f"\033[{sy};{sx}H\033Pq"]
-    
-    for y_band in range(0, h, 6):
-        for sub_y in range(6):
-            actual_y = y_band + sub_y
-            if actual_y >= h:
-                break
-                
-            for x in range(w):
-                r, g, b = matrix[actual_y][x]
-                r_pct = r * 100 // 255
-                g_pct = g * 100 // 255
-                b_pct = b * 100 // 255
-                payload.append(f"#0;2;{r_pct};{g_pct};{b_pct}#0{sixel_chars[sub_y]}")
-            payload.append("$")
-        payload.append("-")
-        
-    payload.append("\033\\")
-    return "".join(payload)
-
-def img_pixel_matrix(path, max_width=None, sharpen=False):
-    """takes img, and converts it to array"""
-    try:
-        img = Image.open(path).convert('RGB')
-    except Exception as e:
-        print(f"Error loading image: {e}")
-        return None, 0, 0
-    
-    # resize img
-    w, h = img.size
-    aspect_ratio = h / w
-    if max_width: w = max_width
-    h = int(w * aspect_ratio)
-    resample_filter = Image.Resampling.NEAREST if sharpen else Image.Resampling.LANCZOS
-    img = img.resize((w, h), resample_filter)
-    
-    img_data = img.load()
-    matrix = []
-    
-    for y in range(h):
-        row = []
-        for x in range(w):
-            r, g, b = img_data[x, y]
-            row.append((r, g, b))
-        matrix.append(row)
-
-    return matrix, w, h
-
-def img(path, mw=None, sx=1, sy=1, sharpen=False):
-    """Draws a static image instantly at targeted coordinates"""
-    matrix, w, h = img_pixel_matrix(path, max_width=mw, sharpen=sharpen)
-    if matrix:
-        sys.stdout.write(matrix_to_sixel(matrix, w, h, sx, sy))
-        sys.stdout.flush()
-
-def GIF(path, mw=None, sx=0, sy=0, speed=10):
-    """Plays a GIF smoothly"""
-    try:
-        gif = Image.open(path)
-    except Exception as e:
-        print(f"Error loading GIF: {e}")
-        return
-
-    print("\033[?25l")
-
-    try:
-        while True:
-            for frame in ImageSequence.Iterator(gif):
-                start_frame_time = time.time()
-                duration = frame.info.get('duration', speed) / 1000.0
-                frame = frame.convert('RGB')
-                w, h = frame.size
-                aspect = h / w
-                
-                if mw: w = mw
-                h = int(w * aspect)
-                frame = frame.resize((w, h), Image.Resampling.NEAREST)
-                img_data = frame.load()
-                matrix = [[img_data[x, y] for x in range(w)] for y in range(h)]
-                
-                sys.stdout.write(matrix_to_sixel(matrix, w, h, sx, sy))
-                sys.stdout.flush()
-                
-                elapsed = time.time() - start_frame_time
-                if elapsed < duration:
-                    time.sleep(duration - elapsed)
-    except KeyboardInterrupt:
-        print("\033[?25h") # Show cursor
-
-def video(path, mw=60, sx=1, sy=1, protocol="kitty"):
-    """Plays a video file smoothly using Kitty or Sixel"""
-    cap = cv2.VideoCapture(path)
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    frame_delay = 1.0 / fps
-
-    try:
-        while cap.isOpened():
-            start_time = time.time()
-            ret, frame = cap.read()
-            if not ret: break
-
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            h, w, _ = frame_rgb.shape
-            aspect = h / w
-            
-            if mw: w = mw
-            h = int(w * aspect)
-
-            pil_img = Image.fromarray(frame_rgb).resize((w, h), Image.Resampling.NEAREST)
-            if protocol == "kitty":
-                render_str = k_img(pil_img, sx, sy)
-            else:
-                # Fallback to Sixel
-                img_data = pil_img.load()
-                matrix = [[img_data[x, y] for x in range(w)] for y in range(h)]
-                render_str = matrix_to_sixel(matrix, w, h, sx, sy)
-            
-            sys.stdout.write(render_str)
-            sys.stdout.flush()
-            
-            elapsed = time.time() - start_time
-            if elapsed < frame_delay:
-                time.sleep(frame_delay - elapsed)
-    finally:
-        cap.release()
-
-def loadFile(path, mw=None, sx=1, sy=1):
-    """a verry fancy func"""
-    f_img   = [".png",".jpg",".jfif"]
-    f_video = [".mp4"]
-    f_GIF   = [".gif"]
-    f_audio = [".mp3"]
-
-    file_type = path.slice(".")[1]
-    if file_type in f_img:
-        img(path, mw, sx, sy)
-    elif file_type in f_GIF:
-        GIF(path, mw, sx, sy)
-    elif file_type in f_video:
-        video(path, mw, sx, sy)
-    elif file_type in f_audio:
-        playFile(path)
-
-# kitty stuff
-
-def k_img(img, sx=1, sy=1):
-    """img to kitty so makes imgs look way better in terminal"""
-    buffer = BytesIO()
-    img.save(buffer, format="PNG")
-    png_data = buffer.getvalue()
-    b64_data = base64.standard_b64encode(png_data).decode('ascii')
-    payload = [f"\033[{sy};{sx}H"]
-    chunk_size = 4096
-    for i in range(0, len(b64_data), chunk_size):
-        chunk = b64_data[i:i+chunk_size]
-        m = 1 if i + chunk_size < len(b64_data) else 0
-        if i == 0:
-            payload.append(f"\033_Ga=T,f=100,m={m};{chunk}\033\\")
-        else:
-            payload.append(f"\033_Gm={m};{chunk}\033\\")
-    return "".join(payload)
-
-def get_window_image(hwnd):
-    """asks Windows to render the window to a memory buffer"""
-    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-    width = right - left
-    height = bottom - top
-
-    if width <= 0 or height <= 0:
-        return None
-    
-    hwndDC = win32gui.GetWindowDC(hwnd)
-    mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
-    saveDC = mfcDC.CreateCompatibleDC()
-
-    saveBitMap = win32ui.CreateBitmap()
-    saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
-    saveDC.SelectObject(saveBitMap)
-
-    result = windll.user32.PrintWindow(hwnd, saveDC.GetSafeHdc(), 3)
-
-    img = None
-    if result == 1:
-        # bitmap -> PIL img
-        bmpinfo = saveBitMap.GetInfo()
-        bmpstr = saveBitMap.GetBitmapBits(True)
-        img = Image.frombuffer(
-            'RGB', 
-            (bmpinfo['bmWidth'], bmpinfo['bmHeight']), 
-            bmpstr, 'raw', 'BGRX', 0, 1
-        )
-    # clean up
-    win32gui.DeleteObject(saveBitMap.GetHandle())
-    saveDC.DeleteDC()
-    mfcDC.DeleteDC()
-    win32gui.ReleaseDC(hwnd, hwndDC)
-
-    return img
-
-def stream_window(name, mw=80, fps=20):
-    frame_delay = 1.0 / fps
-    print("\033[2J\033[?25l") 
-    print(f"Waiting for window: '{name}'...")
-    
-    try:
-        while True:
-            start_time = time.time()
-            
-            windows = gw.getWindowsWithTitle(name)
-            if not windows:
-                sys.stdout.write(f"\r\033[K[!] Lost track of '{name}'. Waiting...")
-                sys.stdout.flush()
-                time.sleep(1)
-                continue
-            
-            win = windows[0]
-            hwnd = win._hWnd 
-
-            img = get_window_image(hwnd)
-            
-            if img:
-                aspect = img.height / img.width
-                h = int(mw * aspect)
-                img = img.resize((mw, h), Image.Resampling.LANCZOS)
-                
-                kitty_str = k_img(img, sx=1, sy=3)
-                header = f"\033[1;1H\033[K[\033[1m {win.title} \033[0m]"
-                
-                sys.stdout.write(header + kitty_str)
-                sys.stdout.flush()
-            
-            elapsed = time.time() - start_time
-            if elapsed < frame_delay:
-                time.sleep(frame_delay - elapsed)
-                
-    except KeyboardInterrupt:
-        print("\033[?25h\n\nStream stopped.")
-
-def stream_screen(x,y,w,h,mw=80,fps=20):
-    pass
-
-def send_mouse_click(hwnd, tui_x, tui_y, terminal_w, terminal_h, win_rect):
-    """mapper."""
-    win_w = win_rect[2] - win_rect[0]
-    win_h = win_rect[3] - win_rect[1]
-
-    scale_x = win_w / terminal_w
-    scale_y = win_h / terminal_h
-    
-    # coordinates
-    lparam = win32api.MAKELONG(int(tui_x * scale_x), int(tui_y * scale_y))
-    
-    # send
-    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam)
-    win32gui.PostMessage(hwnd, win32con.WM_LBUTTONUP, 0, lparam)
-
-def send_key_press(hwnd, vk_code):
-    """key presses."""
-    win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, vk_code, 0)
-    win32gui.PostMessage(hwnd, win32con.WM_KEYUP, vk_code, 0)
-
 # more fancy stuff
 
 class mediaControl:
@@ -728,93 +495,6 @@ class mediaControl:
             self.seek_frame = n
 
 control = mediaControl()
-
-class createQuiz():
-    def __init__(self, c=[]):
-        self.length = 0
-        self.score = 0
-        self.questions = []
-        self.colors = c
-    def colorPalate(self, c):
-        self.colors = c
-    def add(self, type, prompt, answer, settings):
-        self.questions.append([type, prompt, answer, settings])
-    def start(self):
-        for i in self.questions:
-            t, p, a, s = i
-            if t.lower() in ["mc","multiple choice"]:
-                correct = ""
-                print(p)
-                k, v, m, ex = [a.get(key,d) for key, d in [("k","error"), ("v","error"), ("m",100/len(self.questions)), ("ex",None)]]
-                if k == "error" or v == "error":
-                    input("[!] Error.\n> ")
-                    continue
-                
-                if isinstance(v,int):
-                    v = [v]
-                if isinstance(v,list) and v and isinstance(v[0],int):
-                    v = [k[i] for i in v]
-                if isinstance(v,str):
-                    v = [v]
-                if isinstance(v,list) and v and isinstance(v[0],str):
-                    v = [i in v for i in k]
-                
-                if isinstance(m,int) or isinstance(m,float):
-                    m = [0,m]
-                if isinstance(m,dict):
-                    m = [m.get(v[i]) for i in range(len(v))]
-                elif isinstance(m,list) and len(m) != len(v):
-                    m = [max(m) if v[i] else min(m) for i in range(len(v))]
-                
-                if isinstance(ex,str) or ex in [None, False]:
-                    ex = [ex] * len(v)
-                elif isinstance(ex,dict):
-                    ex = [ex.get(k[i]) for i in range(len(k))]
-                elif isinstance(ex,tuple):
-                    match len(ex):
-                        case 1:
-                            ex = [ex[0]] * len(v)
-                        case 2:
-                            if isinstance(ex[0],list):
-                                ex = [ex[1] if i in ex[0] else None for i in (p if isinstance(ex[0][p],int) else k[p] for p in range(len(ex[0])))] + [None] * (len(v) - len(ex[0]))
-                            if isinstance(ex[0],int):
-                                ex = [ex[1] if i == ex[0] else None for i in range(len(v))]
-                            elif isinstance(ex[0],str):
-                                ex = [ex[1] if i == ex[0] else None for i in k]
-
-                
-                for i in range(len(k)):
-                    print(k[i])
-                    if v[i]: correct = k[i]
-                while True:
-                    i = input("")
-                    if i in k:
-                        break
-                    else:
-                        print(end=f"\033[1A\033[K")
-                if i  == correct:
-                    print("correct. :)")
-                    if ex[k.index(i)]: print(ex[k.index(i)])
-                else:
-                    print("incorrect.")
-                    if ex[k.index(i)]: print(ex[k.index(i)])
-                self.score += m[k.index(i)]
-    def result(self,total=100,p=70,per=True):
-        if per:
-            s = 100 * (self.score / total)
-            print(f"score: {s}%")
-            if s > p:
-                print("you passed.")
-            else:
-                print("you no pass.")
-
-clear()
-quiz = createQuiz()
-quiz.add("mc","1 + 1 = ",{"k":["1","2","3","4"],"v":"2"},[])
-quiz.start()
-quiz.result()
-input("quit")
-quit()
 
 TARGET_VID = 0x1A2C
 TARGET_PID = 0x4DBC
@@ -921,7 +601,9 @@ def f_out(func):
     return wrapper
 
 @f_out
-def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis=True, inputs:list=["keyboard","mouse","arrows","ESC","controller"],drag:bool=False, custom_out:dict={}):
+def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis:bool=True, 
+           inputs:list=["keyboard","mouse","arrows","ESC","controller"],drag:bool=False, 
+           custom_out:dict={}, custom_enter="\n"):
     """Fancy input, input that allows mouse inputs."""
     sys.stdout.write(prompt)
     sys.stdout.write(ENABLE_MOUSE_D if drag else ENABLE_MOUSE)
@@ -995,6 +677,24 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
             if not char:
                 continue
 
+            if buffer or char in ('\x1b', '\xe0', '\x00'):
+                
+                if not buffer and char == '\x1b' and "ESC" in inputs:
+                    time.sleep(0.01)
+                    if not char_available():
+                        return {"ESC":"ESC"}
+                buffer += char    
+                if buffer.startswith(('\xe0', '\x00')):
+                    if len(buffer) == 2:
+                        direction = {'H': 'UP', 'P': 'DOWN', 'M': 'RIGHT', 'K': 'LEFT'}.get(buffer[1])
+                        buffer = ""
+                        if direction and "arrows" in inputs:
+                            result["arrows"] = direction
+                            return result
+                    elif len(buffer) > 2:
+                        buffer = ""
+                    continue
+
             if buffer or char == '\x1b':
                 if not buffer and char == '\x1b' and "ESC" in inputs:
                     time.sleep(0.01)
@@ -1050,7 +750,7 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                 continue
 
             if char in ('\n', '\r'):
-                sys.stdout.write(hide + '\n' + reset)
+                sys.stdout.write(hide + custom_enter + reset)
                 sys.stdout.flush()
                 result["keyboard"] = user_input
                 return result
@@ -1068,7 +768,7 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
                 
                 # auto submit feuture
                 if max_length != -1 and len(user_input) >= max_length:
-                    sys.stdout.write(hide + ('\n' if vis else "\x1b[1K\x1b[1G") + reset)
+                    sys.stdout.write(hide + custom_enter + reset)
                     sys.stdout.flush()
                     time.sleep(0.5)
                     result["keyboard"] = user_input
@@ -1208,6 +908,134 @@ def floop(func, args = (), kwargs = None, raw=True):
         while True:
             func(*args, **kwargs)
 
+class createQuiz():
+    def __init__(self, c=[]):
+        self.length = 0
+        self.score = 0
+        self.questions = []
+        self.colors = c
+        self.choices = []
+        self.vote = []
+    def colorPalate(self, c):
+        self.colors = c
+    def add(self, type, prompt, answer, settings):
+        self.questions.append([type, prompt, answer, settings])
+    def start(self):
+        for i in self.questions:
+            t, p, a, s = i
+            if t.lower() in ["mc","multiple choice"]:
+                correct = ""
+                print(p)
+                k, v, m, ex = [a.get(key,d) for key, d in [("k","error"), ("v","error"), ("m",100/len(self.questions)), ("ex",None)]]
+                if k == "error" or v == "error":
+                    input("[!] Error.\n> ")
+                    continue
+                
+                if isinstance(v,int):
+                    v = [v]
+                if isinstance(v,list) and v and isinstance(v[0],int):
+                    v = [k[i] for i in v]
+                if isinstance(v,str):
+                    v = [v]
+                if isinstance(v,list) and v and isinstance(v[0],str):
+                    v = [i in v for i in k]
+                
+                if isinstance(m,int) or isinstance(m,float):
+                    m = [0,m]
+                if isinstance(m,dict):
+                    m = [m.get(v[i]) for i in range(len(v))]
+                elif isinstance(m,list) and len(m) != len(v):
+                    m = [max(m) if v[i] else min(m) for i in range(len(v))]
+                
+                if isinstance(ex,str) or ex in [None, False]:
+                    ex = [ex] * len(v)
+                elif isinstance(ex,dict):
+                    ex = [ex.get(k[i]) for i in range(len(k))]
+                elif isinstance(ex,tuple):
+                    match len(ex):
+                        case 1:
+                            ex = [ex[0]] * len(v)
+                        case 2:
+                            if isinstance(ex[0],list):
+                                ex = [ex[1] if i in ex[0] else None for i in (p if isinstance(ex[0][p],int) else k[p] for p in range(len(ex[0])))] + [None] * (len(v) - len(ex[0]))
+                            if isinstance(ex[0],int):
+                                ex = [ex[1] if i == ex[0] else None for i in range(len(v))]
+                            elif isinstance(ex[0],str):
+                                ex = [ex[1] if i == ex[0] else None for i in k]
+
+                
+                for i in range(len(k)):
+                    print(k[i])
+                    if v[i]: correct = k[i]
+                while True:
+                    i = input("")
+                    if i in k:
+                        break
+                    else:
+                        print(end=f"\033[1A\033[K")
+                if i  == correct:
+                    print("correct. :)")
+                    if ex[k.index(i)]: print(ex[k.index(i)])
+                else:
+                    print("incorrect.")
+                    if ex[k.index(i)]: print(ex[k.index(i)])
+                self.score += m[k.index(i)]
+                self.choices.append(i)
+                self.vote.append(i == correct)
+    def result(self,total=100,p=70,quiet=False):
+        if not quiet:
+            s = 100 * (self.score / total)
+            print(f"score: {s}%")
+            if s > p:
+                print("you passed.")
+            else:
+                print("you no pass.")
+        else:
+            return self.score
+    def tf_gen(self, p, a, loop=False, req=True, options:list=["T","F"]):
+        S = len(max(p,key=len)) + 1
+        for i in p:
+            print(f"{i}{' ' * (S - len(i))} [{options[0]}/{options[1]}]: ")
+        print(end=f"submit: {' ' * (S + len(options[0]) + len(options[1]) - 2)}")
+        print(end=c.up(len(p) + 1))
+        r = [""] * (len(p) + 1)
+        y = 0
+        while True:
+            result = finput("",1,'pass',False,False,["keyboard","arrows"],False,{},c.left())
+            if "keyboard" in result and result["keyboard"] in options:
+                print(end=result["keyboard"]+c.down()+c.left())
+                r[y] = result["keyboard"]
+                y += 1
+                c.down()
+            elif "arrows" in result:
+                if result["arrows"] == "UP" and (y > 0 or loop):
+                    y = (y - 1) % len(r)
+                    c.up()
+                elif result["arrows"] == "DOWN"  and (y < len(r) or loop):
+                    y = (y + 1) % len(r)
+                    c.down()
+                else:
+                    a = {"LEFT":options[0],"RIGHT":options[1],"":""}.get(result["arrows"],"")
+                    print(end=a)
+                    r[y] = a
+                    y += 1
+            if y == len(r) and ("" not in r[:-2] or not req):
+                return r[:-1]
+            else:
+                c.left()
+                
+
+                
+
+#clear()
+#quiz = createQuiz()
+#quiz.add("tf","1 + 1 = ",{"k":["1","2","3","4"],"v":"2"},[])
+#r = quiz.tf_gen(["1 == 1","2 == 1 + 2","3+4=6"],[True,False,False])
+#print(r)
+#quiz.start()
+#quiz.result()
+#input("quit")
+#quit()
 
 def reset_audio():
     pygame.mixer.quit()
@@ -1953,6 +1781,11 @@ def themeselect(themes = theme.ls()):
             elif I == "LEFT":
                 i = (i - 1) % len(themes)
         print(favroites)
+
+
+arrowsDemo()
+input("quit")
+quit()
 
 rlock = threading.Lock()
 #fetch_yt_audio("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
