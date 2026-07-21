@@ -10,13 +10,12 @@ def fetch_spotlight(dest_folder="./wallpapers"):
         print(f"[!] cannot find spotlight folder. enable spotlight in windows settings.")
         return
     
+    count = 1
     if os.path.exists(dest_folder):
-        for f in os.listdir(dest_folder):
-            os.remove(os.path.join(dest_folder, f))
+        count = sum(1 for entry in os.scandir(dest_folder) if entry.is_file()) + 1
     else:
         os.makedirs(dest_folder)
 
-    count = 1
     files = os.listdir(src)
     
     print(f"[*] Loading...")
