@@ -797,11 +797,15 @@ def place(x:int,y:int,msg:str,cls:bool=False,save:bool=False,CLS:bool=True):
 
 # more ansi stuff:
 class Canvas:
-    def __init__(self,D=False):
+    def __init__(self, D=False):
         self.width, self.height = shutil.get_terminal_size()
         if D:
-            if input(f"Canvas size initialized: {self.width}x{self.height}\nok: ") in ["overide","o"]:
+            if input(f"Canvas size initialized: {self.width}x{self.height}\nok: ") in ["overide", "o"]:
                 self.width, self.height = int(input("width: ")), int(input("height: "))
+        self.clear()
+
+    def clear(self):
+        """Re-blanking the arrays is much faster than creating a new Canvas every frame."""
         self.buffer = [[" " for _ in range(self.width)] for _ in range(self.height)]
         self.colors = [["\033[0m" for _ in range(self.width)] for _ in range(self.height)]
 
@@ -843,27 +847,33 @@ class Canvas:
             self.set_pixel(x + w - 1, y + i, char, color)
 
     def circle(self, x, y, R, char="#",  color="\033[0m"):
-        for i in range(2 * R):
-            i += x - R
-            for j in range(2 * R):
-                j += y - R
-                if (i - x)**2 + (j - y)**2 <= R:
-                    self.set_pixel(i,j,char,color)
+        for i in range(2 * R + 1):
+            curr_x = i + x - R
+            for j in range(2 * R + 1):
+                curr_y = j + y - R
+                if (curr_x - x)**2 + (curr_y - y)**2 <= R**2: 
+                    self.set_pixel(curr_x, curr_y, char, color)
 
-    def draw(self, L, char=" ", Color={"any":color("default")}):
+    def draw(self, L, char=" ", Color={"any": "\033[0m"}):
         for y, row in enumerate(L):
             for x, Char in enumerate(row):
                 color_code = Color.get(Char, Color.get("any", "\033[0m"))
                 self.set_pixel(x, y, char, color_code)
                 
-    
     def render(self):
-        """renders the stuff"""
-        output = []
-        output.append("\033[H") 
+        output = ["\033[H"] 
+        current_color = None
         for y in range(self.height - 1):
             for x in range(self.width):
-                output.append(f"{self.colors[y][x]}{self.buffer[y][x]}")
+                color = self.colors[y][x]                
+                if color != current_color:
+                    output.append(color)
+                    current_color = color
+                output.append(self.buffer[y][x])            
+            if y < self.height - 2:
+                output.append("\n")
+        output.append("\033[0m")
+        
         sys.stdout.write("".join(output))
         sys.stdout.flush()
 
@@ -1041,6 +1051,42 @@ def reset_audio():
     pygame.mixer.quit()
     pygame.mixer.init()
 C = Canvas()
+
+#widgets (basically demos)
+
+clear()
+
+def clock(x: int, y: int, r: int):
+    print("\n" * (y - 1), end="")
+    for i in range(-r, r + 1):
+        print(" " * x, end="")
+        for j in range(-2 * r, 2 * r + 1):
+                print(end=("#" if i**2 + (j / 2)**2 < r**2 + 15 and i**2 + (j / 2)**2 > r**2 - 15 else " "))
+                
+        print()
+
+    print("")
+
+PI = math.pi
+RPI = math.pi/30
+S = None
+while True:
+    if S != list(int(i) for i in time.strftime('%H:%M:%S').split(":"))[-1]:
+        H, M, S = (int(i) for i in time.strftime('%H:%M:%S').split(":"))
+
+        clear()
+        C.circle(20,20,9)
+        C.circle(20,20,7,char=" ")
+        C.line(20,20,int(7*math.cos(S*RPI - PI/2)+20),int(7*math.sin(S*RPI - PI/2)+20),"+",color("red"))
+        C.line(20,20,int(7*math.cos(M*RPI - PI/2)+20),int(7*math.sin(M*RPI - PI/2)+20),"+",color("yellow"))
+        C.line(20,20,int(4*math.cos(H*PI/6 + (M * math.pi / 360) - PI/2)+20),int(4*math.sin(H*PI/6 + (M * math.pi / 360) - PI/2)+20),"+",color("green"))
+        C.set_pixel(20,20,"#",color("black"))
+        C.render()
+        print(f"{int(H)+1:>2}:{int(M):>2}:{int(S):>2}")
+    
+C.render()
+input("quit:")
+quit()
 
 # DEMOS
 
@@ -1811,10 +1857,14 @@ def rDemo():
     print("https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797")
     print("https://terminalguide.namepad.de/seq/")
 
+def EDemo():
+    print(end="\033#8")
 
-slideshowDemo()
-input("quit")
-quit()
+def SR():
+    print(end="\0331 q")
+
+
+
 
 rlock = threading.Lock()
 #fetch_yt_audio("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
