@@ -1057,36 +1057,23 @@ C = Canvas()
 clear()
 
 def clock(x: int, y: int, r: int):
-    print("\n" * (y - 1), end="")
-    for i in range(-r, r + 1):
-        print(" " * x, end="")
-        for j in range(-2 * r, 2 * r + 1):
-                print(end=("#" if i**2 + (j / 2)**2 < r**2 + 15 and i**2 + (j / 2)**2 > r**2 - 15 else " "))
-                
-        print()
+    PI = math.pi
+    RPI = math.pi/30
+    S = None
+    while True:
+        if S != list(int(i) for i in time.strftime('%H:%M:%S').split(":"))[-1]:
+            H, M, S = (int(i) for i in time.strftime('%H:%M:%S').split(":"))
+            ir = r-2
+            clear()
+            C.circle(x,y,r)
+            C.circle(x,y,ir,char=" ")
+            C.line(x,y,int(ir*math.cos(S*RPI - PI/2)+x),int(ir*math.sin(S*RPI - PI/2)+y),"+",color("red"))
+            C.line(x,y,int(ir*math.cos(M*RPI - PI/2)+x),int(ir*math.sin(M*RPI - PI/2)+y),"+",color("yellow"))
+            C.line(x,y,int((ir/2)*math.cos(H*PI/6 + (M * math.pi / 360) - PI/2)+20),int((ir/2)*math.sin(H*PI/6 + (M * math.pi / 360) - PI/2)+20),"+",color("green"))
+            C.set_pixel(x,y,"#",color("black"))
+            C.render()
+            print(f"{int(H)+1:>2}:{int(M):>2}:{int(S):>2}")
 
-    print("")
-
-PI = math.pi
-RPI = math.pi/30
-S = None
-while True:
-    if S != list(int(i) for i in time.strftime('%H:%M:%S').split(":"))[-1]:
-        H, M, S = (int(i) for i in time.strftime('%H:%M:%S').split(":"))
-
-        clear()
-        C.circle(20,20,9)
-        C.circle(20,20,7,char=" ")
-        C.line(20,20,int(7*math.cos(S*RPI - PI/2)+20),int(7*math.sin(S*RPI - PI/2)+20),"+",color("red"))
-        C.line(20,20,int(7*math.cos(M*RPI - PI/2)+20),int(7*math.sin(M*RPI - PI/2)+20),"+",color("yellow"))
-        C.line(20,20,int(4*math.cos(H*PI/6 + (M * math.pi / 360) - PI/2)+20),int(4*math.sin(H*PI/6 + (M * math.pi / 360) - PI/2)+20),"+",color("green"))
-        C.set_pixel(20,20,"#",color("black"))
-        C.render()
-        print(f"{int(H)+1:>2}:{int(M):>2}:{int(S):>2}")
-    
-C.render()
-input("quit:")
-quit()
 
 # DEMOS
 
