@@ -1077,6 +1077,33 @@ def clock(x: int, y: int, r: int):
 
 # DEMOS
 
+def rythemGame():
+    delay = 0.5
+    color = '\033[44m  \033[0m'
+    track = ["d","f","j","k"," ","k","df", " "]
+    height = 10
+    with RawTerminal():
+        while True:
+            mod = 1
+            if len(track) < height:
+                for i in range(height - len(track)):
+                    print(">>>  |             |  <<<")
+            elif len(track) > height:
+                mod += len(track) - height
+            for i in range(min(len(track),height)):
+                i += mod
+                print(f">>>  | {color if 'd' in track[-i] else '  '} {color if 'f' in track[-i] else '  '} {color if 'j' in track[-i] else '  '} {color if 'k' in track[-i] else '  '} |  <<<")
+            time.sleep(delay)
+            try:
+                track.pop(0)
+                print(end="\033[H\033[J")
+            except:
+                break
+
+rythemGame()
+input("quit: ")
+quit()
+
 def aimGameDemo():
     if sys.stdin.fileno() is None or not sys.stdin.isatty():
         return
