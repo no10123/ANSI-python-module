@@ -601,7 +601,7 @@ def f_out(func):
     return wrapper
 
 @f_out
-def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=False, vis:bool=True, 
+def finput(prompt:str="", max_length:int=-1, tick_exec:str='pass', tick_func:callable=lambda: None, long:bool=False, vis:bool=True, 
            inputs:list=["keyboard","mouse","arrows","ESC","controller"],drag:bool=False, 
            custom_out:dict={}, custom_enter="\n"):
     """Fancy input, input that allows mouse inputs."""
@@ -620,7 +620,8 @@ def finput(prompt:str="", max_length:int=-1, tick_func:str='pass', long:bool=Fal
     try:
         while True:
             # a tick so you dont need to use threading
-            exec(tick_func)
+            exec(tick_exec)
+            tick_func()
             time.sleep(0.01)
 
             rc = {}
@@ -1077,28 +1078,69 @@ def clock(x: int, y: int, r: int):
 
 # DEMOS
 
-def rythemGame():
+class GameOver(Exception): pass
+def rythemGame(test_inputs=None):
+    global delay, Color, track, height, ltime
     delay = 0.5
-    color = '\033[44m  \033[0m'
-    track = ["d","f","j","k"," ","k","df", " "]
+    Color = '\033[44m  \033[0m'
+    track = ["d", "f", "j", "k", " ", "k", "df", " "]
     height = 10
+    
+    score = 0  
+    test_index = 0 
+    
+    # We use this to prevent popping a note before we've even shown the first frame
+    first_frame = True 
+
     with RawTerminal():
-        while True:
-            mod = 1
-            if len(track) < height:
-                for i in range(height - len(track)):
-                    print(">>>  |             |  <<<")
-            elif len(track) > height:
-                mod += len(track) - height
-            for i in range(min(len(track),height)):
-                i += mod
-                print(f">>>  | {color if 'd' in track[-i] else '  '} {color if 'f' in track[-i] else '  '} {color if 'j' in track[-i] else '  '} {color if 'k' in track[-i] else '  '} |  <<<")
-            time.sleep(delay)
-            try:
+        def play_game():
+            global delay, Color, track, height, ltime
+            nonlocal first_frame
+            
+            if len(track) == 0:
+                raise GameOver()
+            
+            if not first_frame and (time.perf_counter() - ltime < delay): 
+                return None
+                        
+            if not first_frame:
                 track.pop(0)
-                print(end="\033[H\033[J")
-            except:
-                break
+                if len(track) == 0:
+                    raise GameOver()
+            
+            first_frame = False
+            ltime = time.perf_counter()            
+            print(end="\033[H\033[J") 
+            filler = height - len(track)
+
+            for i in range(height):
+                extra = [f'  score: {score}', f'  notes: {track[0] if track else ""}', '  '][min(i,2)]
+                if i < filler:
+                    print(f">>>  |             |  <<< {extra}")
+                else:
+                    notes = track[-(i - max(0, filler) + 1 + max(0, len(track) - height))]
+                    d,f,j,k = [(Color if n in notes else '  ') for n in ['d','f','j','k']]
+                    print(f">>>  | {d} {f} {j} {k} |  <<< {extra}")
+                    
+            return True 
+
+        try:
+            while True:
+                result = finput("", 1, tick_func=play_game, long=False, vis=False, inputs=["keyboard","ESC"], drag=False)
+                
+                if "ESC" in result:
+                    break
+                elif "keyboard" in result:
+                    k = result["keyboard"]
+                    if len(track) > 0:
+                        if k in track[0] and k != " ":
+                            score += 20
+                            track[0] = track[0].replace(k, "", 1)
+                        else:
+                            score -= 1
+        except GameOver:
+            print(f"\nGame Over! Final Score: {score}")
+                
 
 rythemGame()
 input("quit: ")
@@ -1262,7 +1304,7 @@ def clockDemo():
 
     with RawTerminal():
         while True:
-            response = finput(max_length=1,vis=False,tick_func=f'clock_tick({lx},{ly},"\033[33m")' if lx and ly else 'pass',inputs=["keyboard","mouse"])
+            response = finput(max_length=1,vis=False,tick_exec=f'clock_tick({lx},{ly},"\033[33m")' if lx and ly else 'pass',inputs=["keyboard","mouse"])
 
             if "mouse" in response:
                 _, _, x, y = response["mouse"]
@@ -1639,7 +1681,7 @@ def btopPy():
                     place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cpu_box"]), save=False)
                     print()
             
-            response = finput(max_length=1, vis=False, tick_func=f'update()', inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
+            response = finput(max_length=1, vis=False, tick_func=update, inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
             if "ESC" in response:
                 break
             elif "controller" in response:
