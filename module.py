@@ -1079,7 +1079,7 @@ def clock(x: int, y: int, r: int):
 # DEMOS
 
 class GameOver(Exception): pass
-def rythemGame(test_inputs=None):
+def rythemGame():
     global delay, Color, track, height, ltime
     delay = 0.5
     Color = '\033[44m  \033[0m'
@@ -1087,9 +1087,7 @@ def rythemGame(test_inputs=None):
     height = 10
     
     score = 0  
-    test_index = 0 
     
-    # We use this to prevent popping a note before we've even shown the first frame
     first_frame = True 
 
     with RawTerminal():
