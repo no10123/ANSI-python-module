@@ -1080,7 +1080,7 @@ def clock(x: int, y: int, r: int):
 
 class GameOver(Exception): pass
 track, height, delay, Color = None, None, None, None
-def rythemGame(track = ["d", "f", "j", "k", " ", "k", "df", " "], height = 10, delay = 0.5, Color = '\033[44m  \033[0m'):
+def rhythmGame(track = ["d", "f", "j", "k", " ", "k", "df", " "], height = 10, delay = 0.5, Color = '\033[44m  \033[0m'):
     g = globals()
     for name, val in zip(["track", "height", "delay", "Color"], [track, height, delay, Color]):
         g[name] = val
