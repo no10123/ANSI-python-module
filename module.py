@@ -1079,15 +1079,13 @@ def clock(x: int, y: int, r: int):
 # DEMOS
 
 class GameOver(Exception): pass
-def rythemGame():
-    global delay, Color, track, height, ltime
-    delay = 0.5
-    Color = '\033[44m  \033[0m'
-    track = ["d", "f", "j", "k", " ", "k", "df", " "]
-    height = 10
-    
-    score = 0  
-    
+track, height, delay, Color = None, None, None, None
+def rythemGame(track = ["d", "f", "j", "k", " ", "k", "df", " "], height = 10, delay = 0.5, Color = '\033[44m  \033[0m'):
+    g = globals()
+    for name, val in zip(["track", "height", "delay", "Color"], [track, height, delay, Color]):
+        g[name] = val
+
+    score = 0 
     first_frame = True 
 
     with RawTerminal():
@@ -1138,11 +1136,7 @@ def rythemGame():
                             score -= 1
         except GameOver:
             print(f"\nGame Over! Final Score: {score}")
-                
 
-rythemGame()
-input("quit: ")
-quit()
 
 def aimGameDemo():
     if sys.stdin.fileno() is None or not sys.stdin.isatty():
