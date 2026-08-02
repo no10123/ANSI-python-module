@@ -404,6 +404,29 @@ def playFile(path:str):
 
 #non standard inputs
 # fancy stuff
+def get_cursor_position(axsis:str="xy"):
+    STD_OUTPUT_HANDLE = -11
+    handle = ctypes.windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+    
+    class COORD(ctypes.Structure):
+        _fields_ = [("X", wintypes.SHORT), ("Y", wintypes.SHORT)]
+        
+    class CONSOLE_SCREEN_BUFFER_INFO(ctypes.Structure):
+        _fields_ = [("dwSize", COORD),
+                    ("dwCursorPosition", COORD),
+                    ("wAttributes", wintypes.WORD),
+                    ("srWindow", wintypes.SMALL_RECT),
+                    ("dwMaximumWindowSize", COORD)]
+                    
+    csbi = CONSOLE_SCREEN_BUFFER_INFO()
+    ctypes.windll.kernel32.GetConsoleScreenBufferInfo(handle, ctypes.byref(csbi))
+    if axsis == "xy":
+        return csbi.dwCursorPosition.X, csbi.dwCursorPosition.Y
+    elif axsis == "x":
+        return csbi.dwCursorPosition.X
+    elif axsis == "y":
+        return csbi.dwCursorPosition.Y
+    return (0,0)
 
 def get_char_at_cursor():
     STD_OUTPUT_HANDLE = -11
@@ -433,6 +456,38 @@ def get_char_at_cursor():
     )
     
     return char_buffer.value
+
+def get_char_at(x:int, y:int):
+    STD_OUTPUT_HANDLE = -11
+    handle = ctypes.windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+    class COORD(ctypes.Structure):
+        _fields_ = [("X", wintypes.SHORT), ("Y", wintypes.SHORT)]        
+    coord = COORD(x, y)
+    char_buffer = ctypes.create_unicode_buffer(1)
+    chars_read = wintypes.DWORD()
+    ctypes.windll.kernel32.ReadConsoleOutputCharacterW(
+        handle, 
+        char_buffer, 
+        1, 
+        coord, 
+        ctypes.byref(chars_read)
+    )
+    return char_buffer.value
+
+def get_word(x:int=get_cursor_position()[0],y:int=get_cursor_position()[1],words:int=1):
+    if get_char_at(x,y) == " ":
+        x += 1
+    word = ""
+    while True:
+        char = get_char_at(x,y)
+        if (char == " " or not char):
+            if words == 1:
+                break
+            else:
+                words -= 1
+        word += char
+        x += 1
+    return word
 
 def fetch_yt_audio(url:str, name:str="music"):
     """converts YT link to .mp3 audio"""
@@ -1080,7 +1135,7 @@ def clock(x: int, y: int, r: int):
 
 class GameOver(Exception): pass
 track, height, delay, Color = None, None, None, None
-def rhythmGame(track = ["d", "f", "j", "k", " ", "k", "df", " "], height = 10, delay = 0.5, Color = '\033[44m  \033[0m'):
+def rhythmGame(track:list=["d", "f", "j", "k", " ", "k", "df", " "],height:int=10,delay:float = 0.5, Color:str='\033[44m  \033[0m'):
     g = globals()
     for name, val in zip(["track", "height", "delay", "Color"], [track, height, delay, Color]):
         g[name] = val
@@ -1137,6 +1192,14 @@ def rhythmGame(track = ["d", "f", "j", "k", " ", "k", "df", " "], height = 10, d
         except GameOver:
             print(f"\nGame Over! Final Score: {score}")
 
+def rinpDemo():
+    os.system("cls")
+    print(" hello world ")
+    print(" how are you")
+    print("results: ")
+    print(get_word(1,0,2))
+    print(get_word(1,1,3))
+    input()
 
 def aimGameDemo():
     if sys.stdin.fileno() is None or not sys.stdin.isatty():
