@@ -36,14 +36,38 @@ from spotlight import *
 import ctypes
 from ctypes import wintypes, windll
 from displays import *
+import colorsys
 
 class RawTerminal():
-    def __init__(self):
+    """
+    a class that sets the state of the terminal to allow for cursor inputs.
+
+    you must call it before all cursor inputs, 
+    and is recommended for most input loops.
+
+    Args:
+        None
+
+    Returns:
+        a set of functions that are used by the with statement.
+
+    Example:
+        >>> with RawTerminal():
+        >>>     i = finput(max_length=1, inputs=["mouse"])
+
+        to get a mouse input of i. (read finput for details)
+
+    Notes:
+        __init__  is when called
+        __enter__ is when the while happens  (sets terminal to raw mode)
+        __exit__  is when the while finishes (resets terminal to normal mode)
+    """
+    def __init__(self) -> None:
         self.original_stdin_state = None
         self.original_stdout_state = None
         self.fd_in = sys.stdin.fileno() if sys.stdin.isatty() else None
 
-    def __enter__(self):
+    def __enter__(self) -> self:
         if self.fd_in is None:
             print("\033[31m[ERROR]\033[0m this terminal has mouse events disabled.\nplease use a diffrent terminal, to be able to use mouse.")
             return self
@@ -79,7 +103,7 @@ class RawTerminal():
             
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, type, value, traceback)  -> None:
         if os.name == 'nt':
             import ctypes
             if self.original_stdin_state is not None:
@@ -110,53 +134,267 @@ theme = ThemeEngine()
 
 bg_color = ""
 
+def ansi_doc_string():
+    """\033[44mhello\033[0m world"""
 
-def clear(n=""):
-    print(end=bg_color)
+
+
+def exampleDoc() -> None:
+    """
+    prints an example docstring template.
+    
+    Args:
+        None
+    
+    Returns:
+        None
+    
+    Example:
+        >>> exampleDoc()
+    
+    Notes:
+        it's just in here so i can easily copy paste it, not really intended for actual use.
+    """
+    print(
+        """
+small description
+
+optional larger description
+
+Args:
+    parameter:
+        Description.
+
+    parameter:
+        Description.
+
+Returns:
+    Description of the return value.
+
+Example:
+    >>> example()
+
+Notes:
+    Extra information
+"""
+    )
+
+def clear(n:str="", bg_c:str=bg_color) -> str:
+    """
+    applies bg color and clears screen.
+    This sets the main bg to that color.
+
+    Args:
+        n:
+            value after clearing screen, 
+            good for inline expressions.
+        bg_c: 
+            ANSI color for the terminal background color
+
+    Returns: 
+        the value of `n`
+
+    Example:
+        >>> clear(input(), color("green"))
+        >>> # sets bg to green after input and returns input
+
+    Notes:
+        `bg_c` must be an ANSI background escape sequence. Use
+        `color()` or another formatting helper to generate one.
+    """
+    print(end=bg_c)
     os.system("cls" if os.name == "nt" else "clear")
     return n
 
 def leadZero (i:int, d:int) -> str:
-    """number, digits. (1,3) -> '001'"""
+    """
+    takes a num (i) and pads it to a length (d)
+    with 0's
+
+    Args:
+        i:
+            the number you want to pad.
+
+        d:
+            the length you want str(i) to be
+
+    Returns:
+        a str of i with the length of d.
+
+    Example:
+        >>> print(leadZero(65, 6))
+        >>> # output: 000065
+
+    Notes:
+        if d is <= len(str(i)) then it will just return str(i)
+    """
     return "0" * (d - len(str(i))) + str(i)
 
-def rgb(r, g, b, m="f"):
-    """0 to 255 for each color, foreground/background"""
+def rgb(r:int|float, g:int|float, b:int|float, m:str="f", Max:int|float=255):
+    """
+    returns the ANSI escape sequence for a rgb color.
+    can be for foreground (text color) or background (bg color)
+
+    Args:
+        r:
+            the amount of red (0 - 255)
+        g:
+            the amount of green (0 - 255)
+        b:
+            the amount of blue (0 -255)
+        m:
+            determines weather the color will be applied to the text or bg. 
+            ("f" for text/"b" for back ground)
+        Max:
+            determines the range of r,g,b, and can allow for normalized inputs
+            keep in mind once r,g,b have been formatted to the range (0-255) 
+            they will be rounded to the nearest int.
+
+    Returns:
+        a ANSI escape sequence of the rgb color.
+
+    Example:
+        >>> print(f'{rgb(100, 0, 200, "b")} hello')
+        >>> # prints hello highlighted with a puprle color
+
+    Notes:
+        doesn't support floats.
+    """
+    r_calc = int(round(255 * r / Max))
+    g_calc = int(round(255 * g / Max))
+    b_calc = int(round(255 * b / Max))
+    
+    # 2. Clamp them between 0 and 255 so the terminal never breaks
+    r = max(0, min(255, r_calc))
+    g = max(0, min(255, g_calc))
+    b = max(0, min(255, b_calc))
     return f"\033[38;2;{r};{g};{b}m" if m.lower()[0] == "f" else f"\033[48;2;{r};{g};{b}m" if m.lower()[0] == "b" else ""
 
 class cursor:
-    """invis() and vis() may not cetain terminals."""
-    def invis(self):
+    """
+    applies affects to the terminal cursor.
+
+    Returns:
+        A printable escape code (for all functions)
+
+    Example:
+        >>> print(cursor().left(1))
+        >>> #moves the cursor to the left
+
+    Notes:
+        vis and invis may not be supported on some terminals
+    """
+    def invis(self) -> str:
+        """
+        makes the cursor invisible
+        Example: 
+            >>> cursor().invis()
+        """
         return ("\033[?25l")
-    def vis(self):
+    def vis(self) -> str:
+        """
+        makes the cursor visible
+        Example: 
+        >>> cursor().vis()
+        """
         return ("\033[?25h")
-    def up(self, n=1):
+    def up(self, n:int=1) -> str:
+        """
+        moves the cursor up `n` characters
+        Example: 
+        >>> cursor().up()
+        """
         return (f"\033[{n}A")
-    def down(self, n=1):
+    def down(self, n:int=1) -> str:
+        """
+        moves the cursor down `n` characters
+        Example: 
+        >>> cursor().down()
+        """
         return (f"\033[{n}B")
-    def left(self, n=1):
+    def left(self, n:int=1) -> str:
+        """
+        moves the cursor left `n` characters
+        Example: 
+        >>> cursor().left()
+        """
         return (f"\033[{n}D")
-    def right(self, n=1):
+    def right(self, n:int=1) -> str:
+        """
+        moves the cursor right `n` characters
+        Example: 
+        >>> cursor().right()
+        """
         return (f"\033[{n}C")
-    def nextLine(self, n=1):
+    def nextLine(self, n:int=1) -> str:
+        """
+        moves the cursor down `n` characters and to start of Column
+        Example: 
+        >>> cursor().nextLine()
+        """
         return (f"\033[{n}E")
-    def prevLine(self, n=1):
+    def prevLine(self, n:int=1) -> str:
+        """
+        moves the cursor up `n` characters and to start of Column
+        Example: 
+        >>> cursor().prevLine()
+        """
         return (f"\033[{n}F")
-    def collum(self, n):
+    def column(self, n:int) -> str:
+        """
+        moves the cursor to the `n`th column
+        Example: 
+        >>> cursor().column()
+        """
         return (f"\033[{n}G")
-    def getPos(self):
+    def getPos(self) -> str:
+        """
+        gets the cursor pos in the form of \033[r;cR where r is row and c is column
+        Example: 
+        >>> cursor().getPos()
+        """
         return ("\033[6n")
-    def up1(self):
+    def up1(self) -> str:
+        """
+        moves cursor up 1, just use up()
+        Example: 
+        >>> cursor().up1()
+        """
         return ("\033 M")
-    def setPos(self, x="",y=""):
+    def setPos(self, x:int|str=0,y:int|str=0) -> str:
+        """
+        sets the cursor pos to (x,y)
+        Example: 
+        >>> cursor().setPos(3,7)
+        """
         return (f"\033[{y};{x}H")
-    def savePos(self):
+    def savePos(self) -> str:
+        """
+        saves the cursor pos
+        Example: 
+        >>> cursor().savePos()
+        """
         return ("\033[s")
-    def loadPos(self):
+    def loadPos(self) -> str:
+        """
+        sets the cursor pos to the last saved cursor pos
+        Example:
+        >>> cursor().loadPos()
+        """
         return ("\033[u")
-    def saveAll(self):
+    def saveAll(self) -> str:
+        """
+        saves all cursor attributes
+        Example: 
+        >>> cursor().saveAll()
+        """
         return ("\0337")
-    def loadAll(self):
+    def loadAll(self) -> str:
+        """
+        sets all cursor attributes to the saved attributes
+        Example: 
+        >>> cursor().loadAll()
+        """
         return ("\0338")
 c = cursor()
 
@@ -174,7 +412,17 @@ chars = {
 }
 
 class screen:
+    """
+    funcs to manipulate lines
+    Example:
+        >>> screen().save
+    Notes:
+        it's not that useful, but it exists.
+    """
     class erase:
+        """
+        C is cursor
+        """
         def CtoEnd(self):
             return "\033[0J"
         def CtoStart(self):
@@ -220,10 +468,32 @@ class graphics:
         "strikethrough" : "\033[29m"}
 
 def color(name:str="default", m:str="f", bright:bool=False):
-    """name, foreground/background (f,b), bright (true/false)"""
+    """
+    give the name of one of the 9 base colors, and get the ANSI escape code for it.
+    
+    Args:
+        name:
+            the name of the color (must be in list)
+            ["black","red","green","yellow","blue","magenta","cyan","white",None,"default"]
+        m:
+            determines weather the color will be applied to the text or bg. 
+            ("f" for text/"b" for back ground)
+        bright:
+            makes the color brighter if True, is not same as bold.
+    
+    Returns:
+        The ANSI escape code for your color.
+    Example:
+        >>> print(color("red")+"hello"+color())
+        >>> prints a red hello
+    Notes:
+        default is same as reset for `m` (so will reset foreground color if m == "f" else reset bg color)
+    """
     names = ["black","red","green","yellow","blue","magenta","cyan","white",None,"default"]
     return f"\033[{names.index(name.lower()) + 30 + (10 if m.lower()[0] == 'b' else 0) + (60 if bright else 0)}m" if name else ""
-   
+
+
+# >>><<<
 def color256(id:int, m:str="f"):
     """
     0-7: standard colors (as in ESC [ 30-37 m)
@@ -384,7 +654,6 @@ def dual_graph(x, y, width, height, c_up, c_down, color, char:str="█"):
 def iprint(msgs:list, end:str="\n", lend:str=""):
     for i in msgs:
         print(i,end=(end if i == msgs[-1] else lend))
-        
 
 pygame.init()
 pygame.mixer.init()
@@ -489,6 +758,36 @@ def get_word(x:int=get_cursor_position()[0],y:int=get_cursor_position()[1],words
         x += 1
     return word
 
+def attr_to_ansi(attr: int) -> str:
+    fg_bits = attr & 0x0F
+    fg_bgr = fg_bits & 0x07
+    fg_ansi_idx = ((fg_bgr & 4) >> 2) | (fg_bgr & 2) | ((fg_bgr & 1) << 2)
+    fg_code = (90 if (fg_bits & 0x08) else 30) + fg_ansi_idx
+    bg_bits = (attr >> 4) & 0x0F
+    bg_bgr = bg_bits & 0x07
+    bg_ansi_idx = ((bg_bgr & 4) >> 2) | (bg_bgr & 2) | ((bg_bgr & 1) << 2)
+    bg_code = (100 if (bg_bits & 0x08) else 40) + bg_ansi_idx
+    return f"\033[{fg_code};{bg_code}m"
+
+def get_cell_color_at(x: int, y: int) -> str:
+    STD_OUTPUT_HANDLE = -11
+    handle = ctypes.windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+
+    class COORD(ctypes.Structure):
+        _fields_ = [("X", wintypes.SHORT), ("Y", wintypes.SHORT)]
+
+    attr_buffer = wintypes.WORD()
+    read_count = wintypes.DWORD()
+
+    ctypes.windll.kernel32.ReadConsoleOutputAttribute(
+        handle,
+        ctypes.byref(attr_buffer),
+        1,
+        COORD(x, y),
+        ctypes.byref(read_count),
+    )
+    return attr_to_ansi(attr_buffer.value)
+
 def fetch_yt_audio(url:str, name:str="music"):
     """converts YT link to .mp3 audio"""
     #yt-dlp config
@@ -533,6 +832,29 @@ def fetch_yt_video(url: str, name: str = "video", audio:bool=True):
         print(f"error: {e}")
         return None
 
+def rainbowify(s:str, i:int=1, m:str="f", h:int|float=0):
+    S = ""
+    l = len(s)
+    for char in s:
+        r,g,b = colorsys.hsv_to_rgb(h/360, 1, 1)
+        S += rgb(r,g,b,m,1) + char
+        h += (i * (360/len(s))) % 360
+    return S + "\033[0m"
+
+
+def load_bar(duration=10, length=100, color="rainbow"):
+    I = duration/length
+    for i in range(length):
+        i += 1
+        time.sleep(I)
+        r,g,b = colorsys.hsv_to_rgb(i/length, 1, 1)
+        Color = rgb(r,g,b,"b",1)
+        print(f" [ " + rainbowify(" " * i, 1, "b", 360 * i/length) + "\033[0m" + " " * (length - i) + " ] ", end="\r")
+    print()
+while True:
+    clear()
+    load_bar(duration=10)
+    input("DONE.")
 # more fancy stuff
 
 class mediaControl:
@@ -1981,8 +2303,8 @@ rlock = threading.Lock()
 #fetch_yt_audio("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
 #fetch_yt_video("https://www.youtube.com/watch?v=MM2-z8inpY8&list=PLfP6i5T0-DkLlj5LDluZcpP9n6YlATpSG&index=3", "ex")
 
-clear()
-slideshowDemo(t=0.1)
+#clear()
+#slideshowDemo(t=0.1)
 if __name__ == "__main__":
     clear()
     #playFile("bg_music")
