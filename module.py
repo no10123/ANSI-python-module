@@ -758,18 +758,28 @@ def get_word(x:int=get_cursor_position()[0],y:int=get_cursor_position()[1],words
         x += 1
     return word
 
-def attr_to_ansi(attr: int) -> str:
+def attr_to_ansi(attr: int, out:str="ansi") -> str|tuple[tuple[int,int,int],tuple[int,int,int]]:
+    def get_rgb(bits: int) -> tuple[int, int, int]:
+        if bits == 7: return (192, 192, 192)
+        if bits == 8: return (128, 128, 128)        
+        intensity = 255 if (bits & 0x08) else 128
+        r = intensity if (bits & 0x04) else 0
+        g = intensity if (bits & 0x02) else 0
+        b = intensity if (bits & 0x01) else 0        
+        return r, g, b
     fg_bits = attr & 0x0F
-    fg_bgr = fg_bits & 0x07
-    fg_ansi_idx = ((fg_bgr & 4) >> 2) | (fg_bgr & 2) | ((fg_bgr & 1) << 2)
-    fg_code = (90 if (fg_bits & 0x08) else 30) + fg_ansi_idx
     bg_bits = (attr >> 4) & 0x0F
-    bg_bgr = bg_bits & 0x07
-    bg_ansi_idx = ((bg_bgr & 4) >> 2) | (bg_bgr & 2) | ((bg_bgr & 1) << 2)
-    bg_code = (100 if (bg_bits & 0x08) else 40) + bg_ansi_idx
-    return f"\033[{fg_code};{bg_code}m"
+    fr, fg, fb = get_rgb(fg_bits)
+    br, bg, bb = get_rgb(bg_bits)
+    if out == "ansi":
+        return f"\033[38;2;{fr};{fg};{fb};48;2;{br};{bg};{bb}m"
+    elif out == "rgb":
+        return ((fr,fg,fb),(br,bg,bb)) 
+    else:
+        return ""
 
-def get_cell_color_at(x: int, y: int) -> str:
+def get_cell_color_at(x: int, y: int, out:str="ansi") -> str|tuple[tuple[int,int,int],tuple[int,int,int]]:
+    "out = [ansi, rgb]"
     STD_OUTPUT_HANDLE = -11
     handle = ctypes.windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
 
@@ -786,7 +796,7 @@ def get_cell_color_at(x: int, y: int) -> str:
         COORD(x, y),
         ctypes.byref(read_count),
     )
-    return attr_to_ansi(attr_buffer.value)
+    return attr_to_ansi(attr_buffer.value, out=out)
 
 def fetch_yt_audio(url:str, name:str="music"):
     """converts YT link to .mp3 audio"""
@@ -832,31 +842,51 @@ def fetch_yt_video(url: str, name: str = "video", audio:bool=True):
         print(f"error: {e}")
         return None
 
+def loop_(l:list, length:int, I:int=0):
+    S = ""
+    for i in range(length):
+        i += I
+        S += l[i % len(l)]
+    return S
+
 def rainbowify(s:str, i:int=1, m:str="f", h:int|float=0):
     S = ""
     l = len(s)
     for char in s:
         r,g,b = colorsys.hsv_to_rgb(h/360, 1, 1)
-        S += rgb(r,g,b,m,1) + char
+        if m == "fb":
+            S += rgb(r,g,b,"f",1) + rgb(r,g,b,"b",1) + char 
+        else:   
+            S += rgb(r,g,b,m,1) + char
         h += (i * (360/len(s))) % 360
     return S + "\033[0m"
 
-
-def load_bar(duration=10, length=100, color="rainbow"):
+def load_bar(duration=10, length=100, bg:str|tuple[int,int,int]=(0,0,0), color="rainbow"):
     I = duration/length
+    chars = BLOCKS[1:] + BLOCKS[::-1][1:-2]
     for i in range(length):
         i += 1
         time.sleep(I)
         r,g,b = colorsys.hsv_to_rgb(i/length, 1, 1)
         Color = rgb(r,g,b,"b",1)
-        print(f" [ " + rainbowify(" " * i, 1, "b", 360 * i/length) + "\033[0m" + " " * (length - i) + " ] ", end="\r")
-    print()
+        print(f" [ " + rainbowify(loop_(chars, i, i), 1, "f", 360 * i/length) + "\033[0m" + " " * (length - i) + " ] \n [ \033[8m" + rainbowify(loop_(chars, i, i), 1, "b", 360 * i/length) + "\033[0m\033[28m" + " " * (length - i) + " ] ", end="\r" + c.up())
+    print("\n")
+
+clear()
+print("#", end="\r")
+d = get_cell_color_at(0,0,"rgb")
+print(rgb(int(d[0][0]),int(d[0][1]),int(d[0][2]), "f") + rgb(int(d[1][0]),int(d[1][1]),int(d[1][2]), "b") + "your terminal is lying to you\033[0m. Why?")
+print(d)
+input()
 while True:
     clear()
-    load_bar(duration=10)
+    load_bar(duration=10, bg=get_cell_color_at(0,0,"rgb")[1])
     input("DONE.")
 # more fancy stuff
 
+"""
+
+"""
 class mediaControl:
     def __init__(self):
         self.paused = False
