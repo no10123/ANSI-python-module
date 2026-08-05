@@ -37,6 +37,9 @@ import ctypes
 from ctypes import wintypes, windll
 from displays import *
 import colorsys
+from math import cos, sin
+
+
 
 class RawTerminal():
     """
@@ -230,7 +233,7 @@ def leadZero (i:int, d:int) -> str:
     """
     return "0" * (d - len(str(i))) + str(i)
 
-def rgb(r:int|float, g:int|float, b:int|float, m:str="f", Max:int|float=255):
+def rgb(*args, m:str="f", Max:float=255) -> str:
     """
     returns the ANSI escape sequence for a rgb color.
     can be for foreground (text color) or background (bg color)
@@ -258,13 +261,29 @@ def rgb(r:int|float, g:int|float, b:int|float, m:str="f", Max:int|float=255):
         >>> # prints hello highlighted with a puprle color
 
     Notes:
-        doesn't support floats.
+        values outside the valid range are clamped.
     """
+    if not args:
+        return ""
+
+    if isinstance(args[0], tuple):
+        tup = args[0]
+        r, g, b = tup[0], tup[1], tup[2]
+        if len(tup) > 3: m = tup[3]
+        if len(tup) > 4: Max = tup[4]
+        if len(args) > 1: m = args[1]
+        if len(args) > 2: Max = args[2]
+    elif isinstance(args[0], (int, float)):
+        r, g, b = args[0], args[1], args[2]
+        if len(args) > 3: m = args[3]
+        if len(args) > 4: Max = args[4]
+    
+    else:
+        return ""
     r_calc = int(round(255 * r / Max))
     g_calc = int(round(255 * g / Max))
     b_calc = int(round(255 * b / Max))
     
-    # 2. Clamp them between 0 and 255 so the terminal never breaks
     r = max(0, min(255, r_calc))
     g = max(0, min(255, g_calc))
     b = max(0, min(255, b_calc))
@@ -467,7 +486,7 @@ class graphics:
         "hidden"        : "\033[28m",
         "strikethrough" : "\033[29m"}
 
-def color(name:str="default", m:str="f", bright:bool=False):
+def color(name:str="default", m:str="f", bright:bool=False) -> str:
     """
     give the name of one of the 9 base colors, and get the ANSI escape code for it.
     
@@ -494,43 +513,102 @@ def color(name:str="default", m:str="f", bright:bool=False):
 
 
 # >>><<<
-def color256(id:int, m:str="f"):
+def color256(id:int, m:str="f") -> str:
     """
-    0-7: standard colors (as in ESC [ 30-37 m)
-    8-15: high intensity colors (as in ESC [ 90-97 m)
-    16-231: 6 * 6 * 6 cube (216 colors): 16 + 36 * r + 6 * g + b (0 ≤ r, g, b ≤ 5)
-    232-255: grayscale from dark to light in 24 steps.
+    returns the ANSI for the `id`th color, out of 256.
+    
+    Args:
+        id:
+            its position / index in the colors
+        m:
+            determines weather the color will be applied to the text or bg. 
+            ("f" for text/"b" for back ground)
+    Returns:
+        A printable ANSI escape sequence
+    
+    Example:
+        >>> print(color256(17,"f") + "hi" + color("default"))
+    
+    Notes:
+        0-7: standard colors (as in ESC [ 30-37 m)
+        8-15: high intensity colors (as in ESC [ 90-97 m)
+        16-231: 6 * 6 * 6 cube (216 colors): 16 + 36 * r + 6 * g + b (0 ≤ r, g, b ≤ 5)
+        232-255: grayscale from dark to light in 24 steps.
     """
     return f"\033[{38 if m.lower()[0] == 'f' else 48};5;{id}m"
 
-def setMode(id:int, m:str="add"):
-    """0 <= id <= 7 or 13 <= id <= 19 , add/remove (a/r)
-    Changes the screen width or type to the mode specified by id.
-    0 - 40 x 25 monochrome (text)
-    1 - 40 x 25 color (text)
-    2 - 80 x 25 monochrome (text)
-    3 - 80 x 25 color (text)
-    4 - 320 x 200 4-color (graphics)
-    5 - 320 x 200 monochrome (graphics)
-    6 - 640 x 200 monochrome (graphics)
-    7 - Enables line wrapping
+def setMode(id:int, m:str="add") -> str:
+    """
+        returns the ANSI for the `id`th mode.
 
-    13 - 320 x 200 color (graphics)
-    14 - 640 x 200 color (16-color graphics)
-    15 - 640 x 350 monochrome (2-color graphics)
-    16 - 640 x 350 color (16-color graphics)
-    17 - 640 x 480 monochrome (2-color graphics)
-    18 - 640 x 480 color (16-color graphics)
-    19 - 320 x 200 color (256-color graphics)
-    1049 - alternative buffer
+        Args:
+            id:
+                its position / index in the mode
+            m:
+                determines weather the mode will be added or removed. 
+        Returns:
+            A printable ANSI escape sequence
+        
+        Example:
+            >>> # idk how or why ou would use this
+        
+        Notes:
+            0 <= id <= 7 or 13 <= id <= 19 , add/remove (a/r)
+            Changes the screen width or type to the mode specified by id.
+            0 - 40 x 25 monochrome (text)
+            1 - 40 x 25 color (text)
+            2 - 80 x 25 monochrome (text)
+            3 - 80 x 25 color (text)
+            4 - 320 x 200 4-color (graphics)
+            5 - 320 x 200 monochrome (graphics)
+            6 - 640 x 200 monochrome (graphics)
+            7 - Enables line wrapping
+
+            13 - 320 x 200 color (graphics)
+            14 - 640 x 200 color (16-color graphics)
+            15 - 640 x 350 monochrome (2-color graphics)
+            16 - 640 x 350 color (16-color graphics)
+            17 - 640 x 480 monochrome (2-color graphics)
+            18 - 640 x 480 color (16-color graphics)
+            19 - 320 x 200 color (256-color graphics)
+            1049 - alternative buffer
     """
     return f"\033[{'=' if id != 1049 else '?'}{id}{'h' if m.lower()[0] == 'a' else 'l'}"
 
-def divider(char:str="-"):
+def divider(char:str="-") -> None:
+    """
+        prints a line of chars, across the screen.
+        
+        Args:
+            char:
+                char used to print the divider.
+        Returns:
+            None
+        
+        Example:
+            >>> divider("_")
+        
+        Notes:
+            what questions could you possibly have for this function.
+        """
     terminal_width = shutil.get_terminal_size(fallback=(80, 24)).columns
     print(char * terminal_width)
 
-def log(msg:str):
+def log(msg:str) -> None:
+    """
+        log's a msg in a log file
+        
+        Args:
+            msg:
+                the msg you want to log
+        Returns:
+            None
+        Example:
+            >>> log("[error] insert error msg here")
+        
+        Notes:
+            use `tail debug.log` to see the logs in you'r terminal
+    """
     with open("debug.log", "a") as f:
         f.write(f"{msg}\n")
         f.flush()
@@ -538,7 +616,28 @@ def log(msg:str):
 lsbd = ["TL","TR","BL","BR","H","V","LT","RT","TT","BT","C"]
 symbolList = ["\u250c","\u2510","\u2514","\u2518","\u2500","\u2502","\u251c","\u2524","\u252c","\u2534","\u253c"]
 # box drawings
-def bd(id=lsbd,length=1,CC:str=color("default")):
+def bd(id:list=lsbd,length:list|int=1,CC:str=color("default")) -> str:
+    """
+        allows for the creation of dynamic boxes
+        
+        Args:
+            id:
+                the corners in order.
+            length:
+                the length between the corners in order.
+            CC:
+                the ansi color of the lines
+        Returns:
+            A printable ANSI escape sequence to print the box
+        
+        Example:
+            >>> bd(["TL","TR"],3) # prints `┌───┐`
+        
+        Notes:
+            kinda complicated to use, but also super intuitive.
+            Mess around with it and you'll figure it out.
+            Also one of the better functions
+    """
     if len(id[0]) > 1:
         if len(id) == 2:
             id = [id[0],("H" if id[0][0] == id[1][0] else "V"),id[1]]
@@ -565,22 +664,97 @@ def bd(id=lsbd,length=1,CC:str=color("default")):
         return CC + symbolList[lsbd.index(id)] * length + "\033[0m"
 
 shaded = {"none":" ","light":"\u2591","medium":"\u2592","dark":"\u2593"}
-def ps(p:int=0,c:str=""):
-    """0 <= p <= 3"""
+def ps(p:int=0,c:str="") -> str:
+    """
+        returns a shaded box char equal to p (0 = none, 3 = full).
+        
+        Args:
+            p:
+                its shade
+            c:
+                ANSI string for its color
+        Returns:
+            A printable char
+        
+        Example:
+            >>> print(ps(0) + ps(1) + ps(2) + ps(3))
+        
+        Notes:
+            use this for simple gradients.
+    """
     return c + list(shaded.values())[p] + "\033[0m"
 
-def HSVtoRGB(H:int,S:int,V:int):
-    r, g, b = colorsys.hsv_to_rgb(H / 360, S / 100, V / 100)
-    return (255 * r, 255 * g, 255 * b)
+def HSVtoRGB(*args) -> tuple[int,int,int]:
+    """
+        converts to hsv to rgb.
+    
+        Args:
+            H:
+                Hue of the color.
+            S:
+                Saturation of the color.
+            V:
+                Value of the color
+        Returns:
+            A rgb tuple
+    
+        Example:
+            >>> HSVtoRGB(100, 1,1)
+    
+        Notes:
+            only really useful for rainbow stuff.
+    """
+    if len(args) == 3:
+        H, S, V = args[0], args[1], args[2]
+    else:
+        H, S, V = args[0]
+    r, g, b = colorsys.hsv_to_rgb(H / 360, S, V)
+    return (int(255 * r), int(255 * g), int(255 * b))
 
-def HEXtoRGB(hex:str):
+def HEXtoRGB(hex:str) -> tuple[int,int,int]:
+    """
+        converts to hex to rgb.
+    
+        Args:
+            hex:
+                Hex code for the color.
+        Returns:
+            A rgb tuple
+    
+        Example:
+            >>> HEXtoRGB("#ffffff")
+    
+        Notes:
+            nothing to note
+    """
     return tuple(int(hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
 
-def toggle_item(L:list, item):
+def toggle_item(L:list, item) -> list:
+    """
+        converts to hsv to rgb.
+
+        Args:
+            L:
+                list that has the item
+            item:
+                item you want to toggle
+        Returns:
+            the new list
+
+        Example:
+            >>> List = [1,2,3,2,3]
+            >>> toggle_item(List,2) #removes first 2
+            >>> toggle_item(List,2) #removes first 2
+            >>> toggle_item(List,2) #appends a 2
+
+        Notes:
+            its a utility function
+    """
     if item in L:
         L.remove(item)
     else:
         L.append(item)
+    return L
 
 #useful fancy stuff
 
@@ -673,6 +847,39 @@ def playFile(path:str):
 
 #non standard inputs
 # fancy stuff
+def smart_color(c: str | int | tuple[int, int, int] = "", m: str = "f") -> str:
+    """ #########################################################################
+    """################################## WIP ##################################
+    if c == "" or c is None:
+        return ""
+
+    if isinstance(c, int):
+        if 0 <= c <= 255:
+            return color256(c, m)
+        return ""
+        
+    if isinstance(c, tuple) and len(c) == 3:
+        if all(isinstance(i,int) and i <= 255 and i >= 0 for i in c):
+            r, g, b = int(c[0]), int(c[1]), int(c[2])
+            prefix = 38 if m.lower()[0] == 'f' else 48
+            return f"\033[{prefix};2;{r};{g};{b}m"
+
+    if isinstance(c, str):
+        c = c.lower().strip()
+
+        if c.startswith("#") and len(c) == 7:
+            r, g, b = HEXtoRGB(c)
+            prefix = 38 if m.lower()[0] == 'f' else 48
+            return f"\033[{prefix};2;{r};{g};{b}m"
+                
+        if c in ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "default"]:
+            return color(c, m=m)        
+        if c.startswith("bright ") or c.startswith("light "):
+            base_color = c.split(" ", 1)[1]
+            if base_color in ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "default"]:
+                return color(base_color, m=m, bright=True)
+    return ""
+
 def get_cursor_position(axsis:str="xy"):
     STD_OUTPUT_HANDLE = -11
     handle = ctypes.windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
@@ -861,7 +1068,7 @@ def rainbowify(s:str, i:int=1, m:str="f", h:int|float=0):
         h += (i * (360/len(s))) % 360
     return S + "\033[0m"
 
-def load_bar(duration=10, length=100, bg:str|tuple[int,int,int]=(0,0,0), color="rainbow"):
+def load_bar(duration:float=10, length:int=100, color:str="rainbow"):
     I = duration/length
     chars = BLOCKS[1:] + BLOCKS[::-1][1:-2]
     for i in range(length):
@@ -869,24 +1076,24 @@ def load_bar(duration=10, length=100, bg:str|tuple[int,int,int]=(0,0,0), color="
         time.sleep(I)
         r,g,b = colorsys.hsv_to_rgb(i/length, 1, 1)
         Color = rgb(r,g,b,"b",1)
-        print(f" [ " + rainbowify(loop_(chars, i, i), 1, "f", 360 * i/length) + "\033[0m" + " " * (length - i) + " ] \n [ \033[8m" + rainbowify(loop_(chars, i, i), 1, "b", 360 * i/length) + "\033[0m\033[28m" + " " * (length - i) + " ] ", end="\r" + c.up())
+        print(f" [ " + rainbowify(" " * i, 1, "b", 360 * i/length) + "\033[0m" + " " * (length - i) + " ] ", end="\r")
     print("\n")
 
+"""
 clear()
-print("#", end="\r")
-d = get_cell_color_at(0,0,"rgb")
-print(rgb(int(d[0][0]),int(d[0][1]),int(d[0][2]), "f") + rgb(int(d[1][0]),int(d[1][1]),int(d[1][2]), "b") + "your terminal is lying to you\033[0m. Why?")
-print(d)
-input()
+#print("#", end="\r")
+#d = get_cell_color_at(0,0,"rgb")
+#print(rgb(int(d[0][0]),int(d[0][1]),int(d[0][2]), "f") + rgb(int(d[1][0]),int(d[1][1]),int(d[1][2]), "b") + "your terminal is lying to you\033[0m. Why?")
+#print(d)
+#input()
 while True:
     clear()
-    load_bar(duration=10, bg=get_cell_color_at(0,0,"rgb")[1])
+    load_bar(duration=1)
     input("DONE.")
+
+"""
 # more fancy stuff
 
-"""
-
-"""
 class mediaControl:
     def __init__(self):
         self.paused = False
@@ -1001,14 +1208,19 @@ def f_out(func):
                         exec(data[item], {"key": key, "value": item, "result": result}, globals())
                 if key in data:
                     try:
-                        exec(data[key], {"key": key, "value": item, "result": result}, globals())
+                        g = globals()
+                        g["key"] = key
+                        g["value"] = item
+                        g["result"] = result
+                        exec(data[item], g)
                     except Exception as e:
                             print(f"\n[!] error: {key}: {e}")
         return result
     return wrapper
 
 @f_out
-def finput(prompt:str="", max_length:int=-1, tick_exec:str='pass', tick_func:callable=lambda: None, long:bool=False, vis:bool=True, 
+def finput(prompt:str="", max_length:int=-1, tick_exec:str='pass', tick_func:callable=lambda: None, 
+           long:bool=False, vis:bool=True, 
            inputs:list=["keyboard","mouse","arrows","ESC","controller"],drag:bool=False, 
            custom_out:dict={}, custom_enter="\n"):
     """Fancy input, input that allows mouse inputs."""
@@ -2326,6 +2538,120 @@ def EDemo():
 def SR():
     print(end="\0331 q")
 
+def mirrorDemo():
+    target = "steam"
+    global mw, h
+    mw = 500
+    h = 40
+
+    windows = gw.getWindowsWithTitle(target)
+    if windows:
+        hwnd = windows[0]._hWnd
+        t = threading.Thread(target=floop, kwargs={"func": finput,
+        "kwargs": {"inputs": ["keyboard", "mouse", "ESC"],
+            "custom_out": {"mouse":"""
+                            win32gui.SetForegroundWindow(hwnd)
+                            action, btn_name, t_col, t_row = value
+                            rect = win32gui.GetWindowRect(hwnd)
+                            send_mouse_click(hwnd, int(t_col), int(t_row), mw, h, rect)
+                            """, "keyboard":"""
+                            for char in result["keyboard"]:
+                                vk_code = ord(char.upper()) 
+                                send_key_press(hwnd, vk_code)                           
+                            """, "ESC": """os._exit()"""},},},daemon=True)
+        t.start()
+
+        stream_window(target, mw, 15)
+
+def donutDemo():
+    RAINBOW = True
+    HOLO = False
+    hue = 0
+    FPS = 60
+    print("\033]0;Donut\007", end="")
+    s = screen()
+    
+    global running, paused
+    running = True
+
+    t = threading.Thread(target=floop, kwargs={"func": finput,
+            "kwargs": {"inputs": ["ESC"],
+                "custom_out": {"ESC": """global running\nrunning = False""",}}},daemon=True)
+    WIDTH =  30
+    HEIGHT = 30
+
+    T = 10
+    P = 3
+
+    chars = ".,-~:;=!*#$@"
+    chars = list(rgb(255/12 * i, 255/12 * i, 255/12 * i, "b") + " \033[0m" for i in range(12))
+    if RAINBOW:
+        chars = list(rgb(HSVtoRGB(360/12 * i,1,1),"b") + " \033[0m" for i in range(12))
+
+    A, B = 0,0
+
+    R1 = 10
+    R2 = 20
+    K2 = 200
+    K1 = HEIGHT * K2 * 3 / (8 * (R1 + R2))
+
+    t.start()
+    while running:
+        time.sleep(1/FPS)
+        print(c.setPos(0,0), end="")
+        out = [" "] * WIDTH * HEIGHT
+        zbuffer = [0] * WIDTH * HEIGHT
+
+        for theta in range(0, 628, T):
+            for phi in range(0, 628, P):
+
+                cosA = cos(A)
+                sinA = sin(A)
+                cosB = cos(B)
+                sinB = sin(B)
+
+                costheta = cos(theta)
+                sintheta = sin(theta)
+                cosphi   = cos(phi)
+                sinphi   = sin(phi)
+
+                CX = R2 + R1 * costheta
+                CY = R1 * sintheta
+
+                x = CX * (cosB * cosphi + sinA * sinB * sinphi) - CY * cosA * sinB
+                y = CX * (sinB * cosphi - sinA * cosB * sinphi) + CY * cosA * cosB
+                z = K2 + cosA * CX * sinphi + CY * sinA
+                ooz = 1/z
+
+                xp = int(WIDTH / 2 + K1 * ooz * x)
+                yp = int(HEIGHT / 2 - K1 * ooz * y)
+
+                position = xp + WIDTH * yp
+
+                L = cosphi * costheta * sinB - cosA * costheta * sinphi - sinA * sintheta + cosB * (cosA * sintheta - costheta * sinA * sinphi)
+
+                if ooz > zbuffer[position]:
+                    zbuffer[position] = ooz
+                    LI = int(L * 8)
+                    out[position] = chars[max(LI, 0)]
+
+        for i in range(HEIGHT):
+            for j in range(WIDTH):
+                print(end=out[j + WIDTH * i] * 2)
+            print()
+        
+        A += 0.15
+        B += 0.035
+        if HOLO:
+            chars = chars[1:] + chars[:1]
+
+def treeDemo():
+    stack = ["|"]
+    y = 1
+    while True:
+        print()
+        print("\n" * (H - y - 1))
+        print(stack[0])
 
 
 
@@ -2342,26 +2668,6 @@ if __name__ == "__main__":
     #sixtelDemo()
     #themeselect()
     #main()
-    target = "steam"
-    global mw, h
-    mw = 500
-    h = 40
-
-    windows = gw.getWindowsWithTitle(target)
-    if windows:
-        hwnd = windows[0]._hWnd
-        t = threading.Thread(target=floop, kwargs={"func": finput,
-        "kwargs": {"inputs": ["keyboard", "mouse", "ESC"],
-            "custom_out": {"mouse":"""
-                           win32gui.SetForegroundWindow(hwnd)
-                           action, btn_name, t_col, t_row = value
-                           rect = win32gui.GetWindowRect(hwnd)
-                           send_mouse_click(hwnd, int(t_col), int(t_row), mw, h, rect)
-                           """, "keyboard":"""
-                            for char in result["keyboard"]:
-                                vk_code = ord(char.upper()) 
-                                send_key_press(hwnd, vk_code)                           
-                            """, "ESC": """os._exit()"""},},},daemon=True)
-        t.start()
-
-        stream_window(target, mw, 15)
+    donutDemo()
+    with RawTerminal():
+        print("end of demo")

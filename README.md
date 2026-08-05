@@ -2,6 +2,25 @@
 a python module focused on creating better gui within the terminal
 is cross terminal! 
 
+Features
+--------
+- rgb colors
+- 256 bit colors
+- Cursor movement
+- Mouse input
+- controller input
+- arrows input
+- ESC input
+- reading off the terminal
+- Terminal modes
+- box drawing generator
+- HSV/HEX conversion
+- Theme support
+- way more
+
+Example
+
+>>> from ansi import *
 
 
 
