@@ -38,7 +38,10 @@ from ctypes import wintypes, windll
 from displays import *
 import colorsys
 from math import cos, sin
-
+if os.name == 'nt':
+    import msvcrt
+else:
+    import select
 
 
 class RawTerminal():
@@ -729,6 +732,27 @@ def HEXtoRGB(hex:str) -> tuple[int,int,int]:
     """
     return tuple(int(hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
 
+def CMYKtoRGB(*args) -> tuple[int,int,int]:
+    """
+        converts to cmyk to rgb.
+    
+        Args:
+            args:
+                cmyk as a tuple or as separate, args. 
+        Returns:
+            A rgb tuple
+    
+        Example:
+            >>> CMYKtoRGB(1,0,0,0) # -> (0,255,255) 
+    
+        Notes:
+            is on range 0 to 1
+    """
+    if len(args) == 1:
+        args = args[0]
+    C, M, Y, K = args
+    return (255 * (1-C) * (1-K),255 * (1-M) * (1-K),255 * (1-Y) * (1-K))
+
 def toggle_item(L:list, item) -> list:
     """
         converts to hsv to rgb.
@@ -847,7 +871,65 @@ def playFile(path:str):
 
 #non standard inputs
 # fancy stuff
-def smart_color(c: str | int | tuple[int, int, int] = "", m: str = "f") -> str:
+def lerp(a:float|tuple|list, b:float|tuple|list, t:float) -> float|list:
+    """
+    takes 2 numbers, and returns a number between them at place t
+
+    Args:
+        a:
+            The starting number.
+        b:
+            The end number.
+        t:
+            percent as a decimal, of the new numbers place between a and b.
+    Returns:
+        Returns a number that is t% between a and b.
+    
+    Example:
+        >>> lerp(0,[10,12,16],0.5) # -> [5,6,8]
+    
+    Notes:
+        mainly used by gradients, also make sure that if both a and b are lists / tuples,
+        that they have the same length.  
+    """
+    if isinstance(a,float|int) and isinstance(b,float|int):
+        return a + (b - a) * t
+    else:
+        if isinstance(a, int|float):
+            return list(a + (b[i] - a) * t for i in range(len(b)))    
+        elif isinstance(b, int|float):
+            return list(a[i] + (b - a[i]) * t for i in range(len(a)))
+        else:
+            return list(a[i] + (b[i] - a[i]) * t for i in range(len(min(a,b,key=len))))
+
+def gradient2(A=(0,0,0), B=(255,255,255), L = 10):
+    grid = [(0,0,0)] * L
+    grid[0] = A
+    grid[-1] = B
+    for i in range(L - 2):
+        i += 1
+        grid[i] = (lerp(a[0],b[0],i/(L-1)),A[1] + i * (B[1] - A[1])/(L-1),A[2] + i * (B[2] - A[2])/(L-1))
+    return grid
+
+def gradient4(TL = (255,0,0), TR = (0,0,255), BL = (0,255,0), BR = (255,255,0), w = 100, h = 100) -> list:
+    grid = [(0,0,0)] * w * h
+    grid[0] = TL
+    grid[w - 1] = TR
+    grid[w * (h - 1)] = BL
+    grid[-1] = BR
+    for i in range(w):
+        grid[i] = (TL[0] + i * (TR[0] - TL[0])/(w-1),TL[1] + i * (TR[1] - TL[1])/(w-1),TL[2] + i * (TR[2] - TL[2])/(w-1))
+        grid[i + w * (h-1)] = (BL[0] + i * (BR[0] - BL[0])/(w-1),BL[1] + i * (BR[1] - BL[1])/(w-1),BL[2] + i * (BR[2] - BL[2])/(w-1))
+        for j in range(h - 2):
+            j += 1
+            A, B = grid[i], grid[i + w * (h-1)]
+            grid[i + w * j] = (A[0] + j * (B[0] - A[0])/(h-1),A[1] + j * (B[1] - A[1])/(h-1),A[2] + j * (B[2] - A[2])/(h-1))
+    return grid
+
+
+
+
+def smart_color(c: str | int | tuple[int, int, int] | tuple[int, int, int, int] = "", m: str = "f") -> str:
     """ #########################################################################
     """################################## WIP ##################################
     if c == "" or c is None:
@@ -1176,11 +1258,9 @@ def poll_controller():
 gamepad_thread = threading.Thread(target=poll_controller, daemon=True)
 gamepad_thread.start()
 
-
 def get_char(n=1):
     """reads inputs char by char."""
     if os.name == 'nt':
-        import msvcrt
         return msvcrt.getwch()
     else:
         return sys.stdin.read(n)
@@ -1188,12 +1268,12 @@ def get_char(n=1):
 def char_available():
     """buffers inputs, and can see queue"""
     if os.name == 'nt':
-        import msvcrt
         return msvcrt.kbhit()
     else:
-        import select
         dr, _, _ = select.select([sys.stdin], [], [], 0)
-        return bool(dr)
+        return bool(dr) 
+
+
 
 def f_out(func):
     @wraps(func)
@@ -1205,7 +1285,7 @@ def f_out(func):
                 values = value if isinstance(value, list) else [value]
                 for item in values:
                     if item in data:
-                        exec(data[item], {"key": key, "value": item, "result": result}, globals())
+                        exec(data[key], {"key": key, "value": item, "result": result}, globals())
                 if key in data:
                     try:
                         g = globals()
@@ -1222,8 +1302,47 @@ def f_out(func):
 def finput(prompt:str="", max_length:int=-1, tick_exec:str='pass', tick_func:callable=lambda: None, 
            long:bool=False, vis:bool=True, 
            inputs:list=["keyboard","mouse","arrows","ESC","controller"],drag:bool=False, 
-           custom_out:dict={}, custom_enter="\n"):
-    """Fancy input, input that allows mouse inputs."""
+           custom_out:dict={}, custom_enter:str="\n", custom_backspace:str|None=None) -> dict:
+    """
+    better terminal input supporting keyboard, mouse, arrows, ESC, and controllers.
+    
+    Args:
+        prompt:
+            The actual prompt /
+            what is printed before you get an input.
+        max_length:
+            how long the input can be, mainly for text inputs.
+            (-1 is no limit)
+        tick_exec:
+            what gets exec every tick, make sure you dont have the value of this be
+            an input an any way, also it is slower than tick_func, so you'll typically 
+            want to use that one. Also for anything that needs timing use timers.
+        tick_func:
+            a callable function, that is run every tick, basically the same as tick_exec, 
+            but faster, and only for functions.
+        long:
+            makes the mouse outputs longer (don't use this)
+        vis:
+            weather the input is visible or not, 
+            mainly useful if you want to get inputs secretly.
+        inputs:
+            the accepted inputs, so anything else won't trigger anything.
+        drag:
+            doesn't work, sets the terminal to another mode to try and get
+            releases of mouses to work.
+        custom_out:
+            used by f_out(): is used to exec certain commands on certain outputs.
+        custom_enter:
+            allows you to select a char other than new line for enter, and auto submit.
+        custom_backspace:
+            same as custom enter but for backspaces.
+    Returns:
+        A dict {inputs:[values] for each input}
+    Example:
+        >>> print("correct" if finput("1+1=", inputs=["keyboard"])["keyboard"] == "2" else "incorrect")
+    Notes:
+        for mouse inputs, and arrows, and esc, you need to use RawTerminal()
+    """
     sys.stdout.write(prompt)
     sys.stdout.write(ENABLE_MOUSE_D if drag else ENABLE_MOUSE)
     sys.stdout.flush()
@@ -1298,12 +1417,19 @@ def finput(prompt:str="", max_length:int=-1, tick_exec:str='pass', tick_func:cal
                 continue
 
             if buffer or char in ('\x1b', '\xe0', '\x00'):
-                
                 if not buffer and char == '\x1b' and "ESC" in inputs:
-                    time.sleep(0.01)
+                    ESC_TIMEOUT = 0.04
+                    start = time.perf_counter()
+                    while time.perf_counter() - start < ESC_TIMEOUT:
+                        if char_available():
+                            break
+                        time.sleep(0.001)
+
                     if not char_available():
-                        return {"ESC":"ESC"}
-                buffer += char    
+                        return {"ESC": "ESC"}
+
+                buffer += char
+
                 if buffer.startswith(('\xe0', '\x00')):
                     if len(buffer) == 2:
                         direction = {'H': 'UP', 'P': 'DOWN', 'M': 'RIGHT', 'K': 'LEFT'}.get(buffer[1])
@@ -1315,12 +1441,11 @@ def finput(prompt:str="", max_length:int=-1, tick_exec:str='pass', tick_func:cal
                         buffer = ""
                     continue
 
-            if buffer or char == '\x1b':
-                if not buffer and char == '\x1b' and "ESC" in inputs:
+                if buffer.startswith('\x1b[<') and "mouse" in inputs:
                     time.sleep(0.01)
                     if not char_available():
                         return {"ESC":"ESC"}
-                buffer += char    
+                
                 # stuff for mouse
                 if buffer.startswith('\x1b[<') and "mouse" in inputs:
                     match = mouse_regex.search(buffer)
@@ -1369,6 +1494,8 @@ def finput(prompt:str="", max_length:int=-1, tick_exec:str='pass', tick_func:cal
             if "keyboard" not in inputs:
                 continue
 
+            if char == '\t':  # TAB KEY
+                char = "    "
             if char in ('\n', '\r'):
                 sys.stdout.write(hide + custom_enter + reset)
                 sys.stdout.flush()
@@ -1378,7 +1505,10 @@ def finput(prompt:str="", max_length:int=-1, tick_exec:str='pass', tick_func:cal
             elif char in ('\x08', '\x7f'): # backspace
                 if len(user_input) > 0:
                     user_input = user_input[:-1]
-                    sys.stdout.write(hide + '\b \b' + reset)
+                    if custom_backspace == None:
+                        sys.stdout.write(hide + '\b \b' + reset)
+                    else:
+                        sys.stdout.write(hide + custom_backspace + reset)
                     sys.stdout.flush()
                     
             elif char.isprintable():
@@ -1398,7 +1528,6 @@ def finput(prompt:str="", max_length:int=-1, tick_exec:str='pass', tick_func:cal
     finally:
         sys.stdout.write(DISABLE_MOUSE_D if drag else DISABLE_MOUSE)
         sys.stdout.flush()
-
 
 def clock_tick(x,y,c:str="\033[39m",cls:bool=True,b:bool=True,save:bool=False,CLS:bool=True):
     """Draws the time"""
@@ -1987,16 +2116,15 @@ def arrowsDemo():
     sys.stdout.write(CLEAR_SCREEN)
     sys.stdout.flush()
     print("Arrow Key Demo: Press arrow keys on your keyboard.")
-    print("Type 'esc' on your keyboard to exit.\n" + cursor().vis())
+    print("Middle click to exit\n" + cursor().vis())
 
     with RawTerminal():
         while True:
-            response = finput(max_length=1, vis=True, inputs=["keyboard", "arrows", "ESC", "mouse"])
-            if "ESC" in response:
-                break
-
+            response = finput(max_length=1, vis=True, inputs=["keyboard", "arrows", "mouse"],
+                              custom_enter="", custom_backspace=f"{c.left(10)}")
             if "keyboard" in response:
-                pass
+                if response["keyboard"] == "    ":
+                    break
             
             elif "arrows" in response:
                 value = response["arrows"].lower()
@@ -2005,14 +2133,13 @@ def arrowsDemo():
                 sys.stdout.flush()
             
             if "mouse" in response:
-                if "mouse" in response:
-                    action_char, btn_name, x, y = response["mouse"]
-                    if action_char == "M":
-                        if btn_name == "LC":
-                            sys.stdout.write(c.setPos(x,y))
-                            sys.stdout.flush()
-                        elif btn_name == "MC":
-                            place(x=int(x),y=int(y),msg=" ",save=True)
+                action_char, btn_name, x, y = response["mouse"]
+                if action_char == "M":
+                    if btn_name == "LC":
+                        sys.stdout.write(c.setPos(x,y))
+                        sys.stdout.flush()
+                    elif btn_name == "MC":
+                        place(x=int(x),y=int(y),msg=" ",save=True)
                 
     print(CLEAR_SCREEN)
 
@@ -2645,13 +2772,64 @@ def donutDemo():
         if HOLO:
             chars = chars[1:] + chars[:1]
 
-def treeDemo():
-    stack = ["|"]
-    y = 1
-    while True:
+def voidDemo():
+    cx = int(W/2)
+    cy = int(H/2)
+    CX = 0
+    CY = 0
+    typed1 = [[" "] * H] * W
+    typed2 = []
+    typed3 = []
+    typed4 = []
+
+    def render():
+        try:    XD = CX/abs(CX)
+        except: XD = 1
+        try:    YD = CY/abs(CY)
+        except: YD = 1
+
+        print(end=c.setPos(0,0))
+        for i in range(H):
+            for j in range(W):
+                if XD == YD == 1:
+                    print(end=typed1[i + CY][j + CX])
+                elif XD == -1 and YD == 1:
+                    print(end=typed2[i + CY][j - CX])
+                elif XD == YD == -1:
+                    print(end=typed3[i - CY][j - CX])
+                elif XD == 1 and YD == -1:
+                    print(end=typed4[i - CY][j + CX])
+
+    print(c.setPos(cx, cy))
+    with RawTerminal():
+        while True:
+            key = finput()
+
+def gradeintDemo():
+    TL = (255,0,0)
+    TR = (0,0,255)
+    BL = (0,255,0)
+    BR = (255,255,0)
+    L = H - 10
+    grid = [(0,0,0)] * L * L
+    grid[0] = TL
+    grid[L - 1] = TR
+    grid[L * (L - 1)] = BL
+    grid[-1] = BR
+    for i in range(L):
+        grid[i] = (TL[0] + i * (TR[0] - TL[0])/(L-1),TL[1] + i * (TR[1] - TL[1])/(L-1),TL[2] + i * (TR[2] - TL[2])/(L-1))
+        grid[i + L * (L-1)] = (BL[0] + i * (BR[0] - BL[0])/(L-1),BL[1] + i * (BR[1] - BL[1])/(L-1),BL[2] + i * (BR[2] - BL[2])/(L-1))
+        for j in range(L - 2):
+            j += 1
+            A, B = grid[i], grid[i + L * (L-1)]
+            grid[i + L * j] = (A[0] + j * (B[0] - A[0])/(L-1),A[1] + j * (B[1] - A[1])/(L-1),A[2] + j * (B[2] - A[2])/(L-1))
+    for i in range(L):
+        for j in range(L):
+            print(end=f"{rgb(grid[j + L * i],"b")}  \033[0m")
         print()
-        print("\n" * (H - y - 1))
-        print(stack[0])
+    chars = ".,-~:;=!*#$@"
+    chars = list(rgb(255/12 * i, 255/12 * i, 255/12 * i, "b") + " \033[0m" for i in range(12))
+
 
 
 
@@ -2668,6 +2846,6 @@ if __name__ == "__main__":
     #sixtelDemo()
     #themeselect()
     #main()
-    donutDemo()
-    with RawTerminal():
-        print("end of demo")
+    
+    gradeintDemo()
+    input()
