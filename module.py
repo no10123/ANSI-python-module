@@ -781,6 +781,24 @@ def toggle_item(L:list, item) -> list:
     return L
 
 #useful fancy stuff
+def renameTerminal(name:str) -> str:
+    """
+    renames the title of your terminal
+    
+    Args:
+        name:
+            the new name you want your terminal to have
+
+    Returns:
+        An ansi string that you need to print to activate.
+    
+    Example:
+        >>> print(renameTerminal("wow so cool"))
+    
+    Notes:
+        vscode shows python followed by name
+    """
+    return f"\033]0;{name}\007\033]9;9;\"{name}\"\007"
 
 def clear_graph_area(x:int, y:int, width:int, height:int):
     out = []
@@ -871,7 +889,9 @@ def playFile(path:str):
 
 #non standard inputs
 # fancy stuff
-def lerp(a:float|tuple|list, b:float|tuple|list, t:float) -> float|list:
+
+# python leper. 
+def lerp(a:float|tuple|list, b:float|tuple|list, t:float) -> float|list|tuple:
     """
     takes 2 numbers, and returns a number between them at place t
 
@@ -891,43 +911,127 @@ def lerp(a:float|tuple|list, b:float|tuple|list, t:float) -> float|list:
     Notes:
         mainly used by gradients, also make sure that if both a and b are lists / tuples,
         that they have the same length.  
+        also if either a or b is a list the return value is a list,
+        if neither is a list and one is a tuple the return value is a tuple.
     """
+    is_list = isinstance(a,list) or isinstance(b,list)
     if isinstance(a,float|int) and isinstance(b,float|int):
         return a + (b - a) * t
     else:
         if isinstance(a, int|float):
-            return list(a + (b[i] - a) * t for i in range(len(b)))    
+            return list(a + (b[i] - a) * t for i in range(len(b))) if is_list else tuple(a + (b[i] - a) * t for i in range(len(b)))   
         elif isinstance(b, int|float):
-            return list(a[i] + (b - a[i]) * t for i in range(len(a)))
+            return list(a[i] + (b - a[i]) * t for i in range(len(a))) if is_list else tuple(a[i] + (b - a[i]) * t for i in range(len(b)))
         else:
-            return list(a[i] + (b[i] - a[i]) * t for i in range(len(min(a,b,key=len))))
+            return list(a[i] + (b[i] - a[i]) * t for i in range(len(min(a,b,key=len)))) if is_list else tuple(a[i] + (b[i] - a[i]) * t for i in range(len(b)))
 
-def gradient2(A=(0,0,0), B=(255,255,255), L = 10):
-    grid = [(0,0,0)] * L
+def gradient2(A:tuple|float|int=(0,0,0), B:tuple|float|int=(255,255,255), L:int = 10) -> list:
+    """
+    makes a 2d gradient between 2 rgb colors.
+    
+    Args:
+        A:
+            start color
+        B:
+            end color
+        L:
+            length of the returned list
+    
+    Returns:
+        returns a list of rgb tuples that are i% between colors
+        A and B, where i = [0...L] * 100/L
+    
+    Example:
+        >>> for i in gradient2(A=(255,0,0), B=(0,0,255), L = 20):
+        >>>     print(rgb(i,"b") + "  ", end=color(m="b"))
+        >>> # prints a cool gradient from red to blue    
+    
+    Notes:
+        use rgb to convert it into ansi strings.
+        Also you can make the tuples longer or shorter or make them an int|float, for other cases,
+        but its kinda complex, if you do try it, make sure A and B have the same length.
+    """
+    if isinstance(A, float|int): A = (A)
+    if isinstance(B, float|int): B = (B)
+    grid = [()] * L
     grid[0] = A
     grid[-1] = B
     for i in range(L - 2):
         i += 1
-        grid[i] = (lerp(a[0],b[0],i/(L-1)),A[1] + i * (B[1] - A[1])/(L-1),A[2] + i * (B[2] - A[2])/(L-1))
+        grid[i] = lerp(A,B,i/(L-1))
     return grid
 
-def gradient4(TL = (255,0,0), TR = (0,0,255), BL = (0,255,0), BR = (255,255,0), w = 100, h = 100) -> list:
+
+def gradient4(TL=(255,0,0),TR=(0,0,255),BL=(0,255,0),BR:tuple[int,int,int]=(255,255,0),w:int=10,h:int=10,matrix=False) -> list:
+    """
+    a 4 color gradient maker 
+
+    Args:
+        TL:
+            The top left color as a rgb tuple
+        TR:
+            The top right color as a rgb tuple
+        BL:
+            The bottom left color as a rgb tuple
+        BR:
+            The bottom right color as a rgb tuple
+        w:
+            width of the gradient
+        h:
+            the height of the gradient
+        matrix:
+            returns the list as a 2d array, instead of a 1d list.
+            As of currently, it is slower than normal.
+    
+    Returns:
+        a 1d list of the gradient
+        if matrix == True:
+            it returns a 2d list instead.
+            [[TL...TR]...[BL...BR]]
+
+    Example:
+        >>> g = gradient4()
+        >>> for i in range(10): # (height of the gradient)
+        >>>     for j in range(10): # (width of the gradient)
+        >>>         print(rgb(g[j + 10 * i],"b") + "  ", end=color(m="b")) # (10 is width)
+        >>>     print()
+    Example2:
+        >>> # yeah im spoiling you with a second example. (but this is one of my favorite functions)
+        >>> chars = ".,-~:;=!*#$@"
+        >>> g = gradient4(0,4,7,11)
+        >>> for i in range(10): # (height of the gradient)
+        >>>     for j in range(10): # (width of the gradient)
+        >>>         print(chars[round(g[j + 10 * i])] * 2, end="") # (10 is width)
+        >>>     print()
+
+    Notes:
+        like gradient2(), 
+        use rgb to convert it into ansi strings.
+        Also you can make the tuples longer or shorter or make them an int|float, for other cases,
+        but its kinda complex, if you do try it, make sure A and B have the same length.
+    """
     grid = [(0,0,0)] * w * h
     grid[0] = TL
     grid[w - 1] = TR
     grid[w * (h - 1)] = BL
     grid[-1] = BR
     for i in range(w):
-        grid[i] = (TL[0] + i * (TR[0] - TL[0])/(w-1),TL[1] + i * (TR[1] - TL[1])/(w-1),TL[2] + i * (TR[2] - TL[2])/(w-1))
-        grid[i + w * (h-1)] = (BL[0] + i * (BR[0] - BL[0])/(w-1),BL[1] + i * (BR[1] - BL[1])/(w-1),BL[2] + i * (BR[2] - BL[2])/(w-1))
+        grid[i] = lerp(TL,TR,i/(w-1))
+        grid[i + w * (h-1)] = lerp(BL,BR,i/(w-1))
         for j in range(h - 2):
             j += 1
             A, B = grid[i], grid[i + w * (h-1)]
-            grid[i + w * j] = (A[0] + j * (B[0] - A[0])/(h-1),A[1] + j * (B[1] - A[1])/(h-1),A[2] + j * (B[2] - A[2])/(h-1))
-    return grid
-
-
-
+            grid[i + w * j] = lerp(A,B,j/(h-1))
+    if matrix:
+        m = []
+        for i in range(h):
+            M = []
+            for j in range(w):
+                M.append(grid[j + w * i])
+            m.append(M)
+        return m
+    else:
+        return grid
 
 def smart_color(c: str | int | tuple[int, int, int] | tuple[int, int, int, int] = "", m: str = "f") -> str:
     """ #########################################################################
@@ -2805,30 +2909,39 @@ def voidDemo():
         while True:
             key = finput()
 
-def gradeintDemo():
-    TL = (255,0,0)
-    TR = (0,0,255)
-    BL = (0,255,0)
-    BR = (255,255,0)
-    L = H - 10
-    grid = [(0,0,0)] * L * L
-    grid[0] = TL
-    grid[L - 1] = TR
-    grid[L * (L - 1)] = BL
-    grid[-1] = BR
-    for i in range(L):
-        grid[i] = (TL[0] + i * (TR[0] - TL[0])/(L-1),TL[1] + i * (TR[1] - TL[1])/(L-1),TL[2] + i * (TR[2] - TL[2])/(L-1))
-        grid[i + L * (L-1)] = (BL[0] + i * (BR[0] - BL[0])/(L-1),BL[1] + i * (BR[1] - BL[1])/(L-1),BL[2] + i * (BR[2] - BL[2])/(L-1))
-        for j in range(L - 2):
-            j += 1
-            A, B = grid[i], grid[i + L * (L-1)]
-            grid[i + L * j] = (A[0] + j * (B[0] - A[0])/(L-1),A[1] + j * (B[1] - A[1])/(L-1),A[2] + j * (B[2] - A[2])/(L-1))
-    for i in range(L):
-        for j in range(L):
-            print(end=f"{rgb(grid[j + L * i],"b")}  \033[0m")
-        print()
-    chars = ".,-~:;=!*#$@"
-    chars = list(rgb(255/12 * i, 255/12 * i, 255/12 * i, "b") + " \033[0m" for i in range(12))
+
+def gradientDemo():
+    w, h = 30, 30
+    t = 0
+
+    while True:
+        TL = (int((math.sin(t) + 1) * 127.5),
+              int((math.sin(t + 2) + 1) * 127.5),
+              int((math.sin(t + 4) + 1) * 127.5))
+
+        TR = (int((math.cos(t + 1) + 1) * 127.5),
+              int((math.cos(t + 3) + 1) * 127.5),
+              int((math.cos(t + 5) + 1) * 127.5))
+
+        BL = (int((math.cos(t + 2) + 1) * 127.5),
+              int((math.cos(t + 4) + 1) * 127.5),
+              int((math.cos(t + 6) + 1) * 127.5))
+
+        BR = (int((math.sin(t + 3) + 1) * 127.5),
+              int((math.sin(t + 5) + 1) * 127.5),
+              int((math.sin(t + 7) + 1) * 127.5))
+
+        g = gradient4(TL, TR, BL, BR, w, h)
+
+        print("\033[H", end="")
+
+        for y in range(h):
+            for x in range(w):
+                print(rgb(g[x + w * y], "b") + "  ", end="")
+            print("\033[0m")
+
+        t += 0.05
+        time.sleep(0.03)
 
 
 
@@ -2847,5 +2960,5 @@ if __name__ == "__main__":
     #themeselect()
     #main()
     
-    gradeintDemo()
+    gradientDemo()
     input()
