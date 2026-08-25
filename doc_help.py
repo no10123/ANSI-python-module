@@ -490,25 +490,18 @@ def main_menu(
     out = []
     # "╭─╮╰╯│"
     O = []
-    for mode, lines in data.items():
+    n = 0
+    R = "\033[0m"
+    for f in functions:
         Row = ""
-        if mode != "Desc":
-            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cs + "-- " + mode + " " + "-" * max(0, width - 8 - len(mode)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
-            cbi += 1            
-        cl = color_d.get(mode, [ct])
         
-        for j in lines:
-            j = j[4:] if j [:4] == "    " else j
-            I = sum(1 for i in range(0, len(j), 4) if j[i:i+4] == "    ")
-            if mode == typed and I == 0:
-                arg_name = j.split(":")[0].strip()
-                if arg_name in types and types[arg_name]:
-                    type_str = f" [{types[arg_name]}]"
-                    j = j.replace(f"{arg_name}:", f"{arg_name}{type_str}:", 1)
-            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
-            cbi += 1
-        if Row:
+        Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
+        cbi += 1
+        if n == 3:
             O.append(Row[:-1])
+            n = 0
+        else:
+            n += 1
     if isinstance(cb, list):
         out.append(wrap(cb[0], "╭" + "─" * (width - 2) + "╮"))
     else:
