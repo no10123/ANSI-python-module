@@ -485,30 +485,31 @@ def main_menu(
         cb = [[rgb(*color) for color in i] for i in raw_grad]    
     cbl = [row[0] for row in cb] if isinstance(cb, list) else cb
     cbr = [row[-1] for row in cb] if isinstance(cb, list) else cb
-    cbi = 3
+    cbi = 0
 
     out = []
     # "╭─╮╰╯│"
     O = []
     n = 0
     R = "\033[0m"
+    j = ""
     for f in functions:
         Row = ""
-        
-        Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
-        cbi += 1
+        n += 1
+        j += str(f)
         if n == 3:
-            O.append(Row[:-1])
+            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
+            cbi += 1
+            if Row:
+                O.append(Row[:-1])
             n = 0
+            j = ""
         else:
             n += 1
     if isinstance(cb, list):
         out.append(wrap(cb[0], "╭" + "─" * (width - 2) + "╮"))
     else:
         out.append(cb + "╭" + "─" * (width - 2) + "╮")
-    out.append((cbl[0] if isinstance(cbl,list) else cbl) + "│ " + cT + name + R + " " * (width - 4 - len(name))  + (cbr[0] if isinstance(cbr,list) else cbr) + " │")
-    out.append((cbl[1] if isinstance(cbl,list) else cbl) + "│ " + cc + sg   + R + " " * (width - 4 - len(sg))    + (cbr[1] if isinstance(cbr,list) else cbr) + " │")
-    out.append((cbl[2] if isinstance(cbl,list) else cbl) + "│ " +                 " " * (width - 4)              + (cbr[2] if isinstance(cbr,list) else cbr) + " │")
     for i in O: out.append(i)
     pal = "".join(c + "██\033[0m" for c in [cT,cs,cn,ct,CB,cc])
     BL = "╰" + "─" * max(0, width - (2 * 6) - 9) + " [ "
