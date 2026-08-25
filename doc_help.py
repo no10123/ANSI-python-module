@@ -259,8 +259,6 @@ def Irgb(s:str) -> tuple:
     """
     return tuple(int(i) for i in list(s[7:-1].split(";")))
 
-print(Irgb(rgb(98,43,21)))
-
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 def clear(n:str="", bg_c:str="") -> str:
@@ -437,6 +435,7 @@ def main_menu(
     ct: str|list = rgb(220, 220, 220), # text
     cb: str|list = rgb(100, 100, 100), # border
     cc: str|list = rgb(100, 255, 150), # code
+    chrome: bool = False
     ):
     """
     a helper func that prints all funcs in the current file.
@@ -454,6 +453,8 @@ def main_menu(
             color of the border
         cc:
             color of code
+        chrome:
+            if border is rainbow
 
     Returns:
         A printable menu
@@ -472,8 +473,59 @@ def main_menu(
             if inspect.isfunction(obj) and getattr(obj, "__module__", "") == current_module:    
                 functions.append(name)
         functions.sort()
+    
+    if chrome:
+        raw_grad = gradient4(
+            Irgb(cT),
+            Irgb(cc),
+            Irgb(cn),
+            Irgb(cs),
+            width, max(2,total_rows), matrix=True
+        )
+        cb = [[rgb(*color) for color in i] for i in raw_grad]    
+    cbl = [row[0] for row in cb] if isinstance(cb, list) else cb
+    cbr = [row[-1] for row in cb] if isinstance(cb, list) else cb
+    cbi = 3
+
     out = []
     # "╭─╮╰╯│"
+    O = []
+    for mode, lines in data.items():
+        Row = ""
+        if mode != "Desc":
+            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cs + "-- " + mode + " " + "-" * max(0, width - 8 - len(mode)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
+            cbi += 1            
+        cl = color_d.get(mode, [ct])
+        
+        for j in lines:
+            j = j[4:] if j [:4] == "    " else j
+            I = sum(1 for i in range(0, len(j), 4) if j[i:i+4] == "    ")
+            if mode == typed and I == 0:
+                arg_name = j.split(":")[0].strip()
+                if arg_name in types and types[arg_name]:
+                    type_str = f" [{types[arg_name]}]"
+                    j = j.replace(f"{arg_name}:", f"{arg_name}{type_str}:", 1)
+            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
+            cbi += 1
+        if Row:
+            O.append(Row[:-1])
+    if isinstance(cb, list):
+        out.append(wrap(cb[0], "╭" + "─" * (width - 2) + "╮"))
+    else:
+        out.append(cb + "╭" + "─" * (width - 2) + "╮")
+    out.append((cbl[0] if isinstance(cbl,list) else cbl) + "│ " + cT + name + R + " " * (width - 4 - len(name))  + (cbr[0] if isinstance(cbr,list) else cbr) + " │")
+    out.append((cbl[1] if isinstance(cbl,list) else cbl) + "│ " + cc + sg   + R + " " * (width - 4 - len(sg))    + (cbr[1] if isinstance(cbr,list) else cbr) + " │")
+    out.append((cbl[2] if isinstance(cbl,list) else cbl) + "│ " +                 " " * (width - 4)              + (cbr[2] if isinstance(cbr,list) else cbr) + " │")
+    for i in O: out.append(i)
+    pal = "".join(c + "██\033[0m" for c in [cT,cs,cn,ct,CB,cc])
+    BL = "╰" + "─" * max(0, width - (2 * 6) - 9) + " [ "
+    BR = " ] ─╯"
+    if isinstance(cb, list):
+        out.append(wrap(cb[-1][:len(BL)], BL) + pal + wrap(cb[-1][-len(BR):], BR))
+    else:
+        out.append(cb + BL + pal + cb + BR)
+    out.append(R)
+    return "\n".join(out)
 
 history = []
 HI = -2
