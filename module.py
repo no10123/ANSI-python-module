@@ -42,7 +42,12 @@ if os.name == 'nt':
     import msvcrt
 else:
     import select
-
+import inspect
+import textwrap
+from typing import Callable, Any, Dict, List
+import ast
+import subprocess
+import difflib
 
 class RawTerminal():
     """
@@ -135,6 +140,8 @@ Debug = False
 BLOCKS = [" ", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 I_BLOCKS = [" ", "▔", "🮂", "🮃", "▀", "🮄", "🮅", "🮆", "█"]
 W, H = shutil.get_terminal_size()
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
 
 theme = ThemeEngine()
 
@@ -780,6 +787,49 @@ def toggle_item(L:list, item) -> list:
         L.append(item)
     return L
 
+def copy(text: str) -> None:
+    """
+    copies text to clipboard
+    
+    Args:
+        text:
+            The text you want copied
+    
+    Returns:
+        None
+    
+    Example:
+        >>> copy("wow :)")
+    
+    Notes:
+        windows only support
+        (can print stuff.)
+    """
+    try:
+        subprocess.run('clip.exe', input=text, text=True, check=True)
+    except Exception as e:
+        print(f"error: {e}")
+
+def Irgb(s:str) -> tuple:
+    """
+    returns a rgb tuple for a ANSI rgb color.
+    
+    Args:
+        s:
+            The string.
+    
+    Returns:
+        a rgb tuple of the ANSI rgb color.
+    
+    Example:
+        >>> print(Irgb(rgb(98,43,21)))
+    
+    Notes:
+        Has no error handling.
+    """
+    return tuple(int(i) for i in list(s[7:-1].split(";")))
+
+
 #useful fancy stuff
 def renameTerminal(name:str) -> str:
     """
@@ -1265,20 +1315,583 @@ def load_bar(duration:float=10, length:int=100, color:str="rainbow"):
         print(f" [ " + rainbowify(" " * i, 1, "b", 360 * i/length) + "\033[0m" + " " * (length - i) + " ] ", end="\r")
     print("\n")
 
-"""
-clear()
-#print("#", end="\r")
-#d = get_cell_color_at(0,0,"rgb")
-#print(rgb(int(d[0][0]),int(d[0][1]),int(d[0][2]), "f") + rgb(int(d[1][0]),int(d[1][1]),int(d[1][2]), "b") + "your terminal is lying to you\033[0m. Why?")
-#print(d)
-#input()
-while True:
-    clear()
-    load_bar(duration=1)
-    input("DONE.")
+def wrap(colors:list, s:str=" ",p:str|tuple[str]|None=None, end:str="\033[0m") -> str:
+    """
+    wraps a piece of text, with a list of colors.
+    
+    Args:
+        colors:
+            a list of colors you want applied to the text, keep
+            in mind the colors list is on a modules if the index,
+            is greater then len(colors) it will loop.
+            Also "" as a color is just default.
+        s:
+            The text your adding the color too.
+        p:
+            custom split for colors, 
+            typically not needed, but if you
+            want specific coloring, it is useful.
+        end:
+            the reset code used, 
+            change if you want the default color to be something
+            else.
+    
+    Returns:
+        a printable string
+    
+    Example:
+        >>> # prints the text with a block font and 4 color gradient.
+        >>> banner = [
+        >>> '██╗  ██╗███████╗██╗     ██╗      ██████╗     ██╗    ██╗ ██████╗ ██████╗ ██╗     ██████╗ ',
+        >>> '██║  ██║██╔════╝██║     ██║     ██╔═══██╗    ██║    ██║██╔═══██╗██╔══██╗██║     ██╔══██╗',
+        >>> '███████║█████╗  ██║     ██║     ██║   ██║    ██║ █╗ ██║██║   ██║██████╔╝██║     ██║  ██║',
+        >>> '██╔══██║██╔══╝  ██║     ██║     ██║   ██║    ██║███╗██║██║   ██║██╔══██╗██║     ██║  ██║',
+        >>> '██║  ██║███████╗███████╗███████╗╚██████╔╝    ╚███╔███╔╝╚██████╔╝██║  ██║███████╗██████╔╝',
+        >>> '╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝ ╚═════╝      ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝ ']
+        >>> lines = banner
+        >>> w = max(len(line) for line in lines)
+        >>> h = len(lines)
+        >>> 
+        >>> g = gradient4((255, 0, 140),(70, 0, 255),(0, 255, 220),(255, 230, 0),w,h,matrix=True)
+        >>> for y, line in enumerate(lines):
+        >>>     ansi_colors = [rgb(int(r), int(g_), int(b))for r, g_, b in g[y]]
+        >>>     print(wrap(ansi_colors, line))
+    
+    Notes:
+        p is auto defined when None. Also try using the gradient tools,
+        as they generate lists that can be used by wrap.
+    """
+    sp = 0
+    S = []
+    if isinstance(p,tuple):
+        ss = p[0]
+    elif p and not isinstance(p,tuple):
+        S = s.split(p)
+    else:
+        ss = []
+        if s:
+            ss.append(list(s[i] for i in range(len(s))))
+        if " " in s:
+            ss.append(re.split(r'(?<= )', s))
+        if "\n" in s:
+            ss.append(re.split(r'(?<=\n)', s))
+    if isinstance(ss, list):
+        if len(ss) == 1:
+            S = ss[0]
+        else:
+            for item in ss:
+                if len(colors) == len(item):
+                    S = item
+                    break
+    else:
+        S = s.split("")
 
-"""
+    R = ""
+    for i in S:
+        if i.endswith("\n"):
+            R += colors[sp] + i[:-1] + end + "\n"
+        else:
+            R += colors[sp] + i + end
+        sp = (sp + 1) % len(colors)
+    return R + end
+
 # more fancy stuff
+
+def pretty_doc(
+    func: Callable[..., Any],
+    width: int = 70,                   # colors:
+    cT: str      = rgb(0, 255, 255),   # Title
+    cs: str      = rgb(255, 180, 0),   # section
+    cn: str      = rgb(255, 100, 180), # name
+    ct: str      = rgb(220, 220, 220), # text
+    cb: str|list = rgb(100, 100, 100), # border
+    cc: str      = rgb(100, 255, 150), # code
+    # -- color_d is how each section is styled off of indentation, and headers is the name of each section --
+    color_d:dict = {"Desc": ["ct"],"Args:": ["cn", "ct"],"Returns:": ["ct"],"Example:": ["cc"],"Notes:": ["ct"]},
+    headers:list = ["Args:", "Arguments:", "Returns:", "Yields:", "Raises:", "Example:", "Examples:", "Notes:"],
+    typed:str|None = "Args:", # this is your argument section, will auto apply types if wanted (if not use None).
+    chrome: bool = False
+) -> str:
+    """
+    a helper func that can be used as a stylized help func.
+
+    Args:
+        func:
+            the function you want to see the doc's of.
+        width:
+            the width of the box
+        cT:
+            color of the Title
+        cs:
+            color of the section Titles
+        cn:
+            color for name of the function
+        cb:
+            color of the border
+        cc:
+            color of code
+        color_d:
+            color coding based on indentation for each section.
+        headers:
+            the names of each section
+        typed:
+            your argument section, will auto apply types if wanted (if not use None).
+
+    Returns:
+        A printable card
+    
+    Example:
+        >>> print(pretty_doc(pretty_doc, 120))
+
+    Notes:
+        Use a list in the colors for cool text, uses wrap.
+        """
+    doc = inspect.getdoc(func)
+    name = getattr(func, "__name__", type(func).__name__)
+
+    if not doc:
+        doc = "*No docstring provided for this function.*"
+
+    try:
+        sig = inspect.signature(func)
+        types = {name: (param.annotation if param.annotation != inspect.Parameter.empty else None) for name, param in sig.parameters.items()}
+    except (ValueError, TypeError):
+        types = {}
+    sg = str(sig)
+    R = "\033[0m"
+    LD = doc.expandtabs(4).split("\n")
+    COLORS = {"cT":cT,"cs":cs,"cn":cn,"ct":ct,"cb":cb,"cc":cc}
+    color_d = {k: [COLORS.get(c, c) for c in v] for k, v in color_d.items()}
+    data = {"Desc": []}
+    mode = "Desc"
+    for d in LD:
+        if d.strip() in headers:
+            mode = d.strip()
+            if mode not in data:
+                data[mode] = []
+        else:
+            data[mode].append(d)
+    total_rows = 3
+    for m, lines in data.items():
+        if m != "Desc":
+            total_rows += 1
+        total_rows += len(lines)
+    CB = cb[0] if isinstance(cb, list) else cb
+    if chrome:
+        raw_grad = gradient4(
+            Irgb(cT),
+            Irgb(cc),
+            Irgb(cn),
+            Irgb(cs),
+            width, max(2,total_rows), matrix=True
+        )
+        cb = [[rgb(*color) for color in i] for i in raw_grad]    
+    cbl = [row[0] for row in cb] if isinstance(cb, list) else cb
+    cbr = [row[-1] for row in cb] if isinstance(cb, list) else cb
+    cbi = 3
+
+    out = []
+    # "╭─╮╰╯│"
+    O = []
+    for mode, lines in data.items():
+        Row = ""
+        if mode != "Desc":
+            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cs + "-- " + mode + " " + "-" * max(0, width - 8 - len(mode)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
+            cbi += 1            
+        cl = color_d.get(mode, [ct])
+        
+        for j in lines:
+            j = j[4:] if j [:4] == "    " else j
+            I = sum(1 for i in range(0, len(j), 4) if j[i:i+4] == "    ")
+            if mode == typed and I == 0:
+                arg_name = j.split(":")[0].strip()
+                if arg_name in types and types[arg_name]:
+                    type_str = f" [{types[arg_name]}]"
+                    j = j.replace(f"{arg_name}:", f"{arg_name}{type_str}:", 1)
+            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
+            cbi += 1
+        if Row:
+            O.append(Row[:-1])
+    if isinstance(cb, list):
+        out.append(wrap(cb[0], "╭" + "─" * (width - 2) + "╮"))
+    else:
+        out.append(cb + "╭" + "─" * (width - 2) + "╮")
+    out.append((cbl[0] if isinstance(cbl,list) else cbl) + "│ " + cT + name + R + " " * (width - 4 - len(name))  + (cbr[0] if isinstance(cbr,list) else cbr) + " │")
+    out.append((cbl[1] if isinstance(cbl,list) else cbl) + "│ " + cc + sg   + R + " " * (width - 4 - len(sg))    + (cbr[1] if isinstance(cbr,list) else cbr) + " │")
+    out.append((cbl[2] if isinstance(cbl,list) else cbl) + "│ " +                 " " * (width - 4)              + (cbr[2] if isinstance(cbr,list) else cbr) + " │")
+    for i in O: out.append(i)
+    pal = "".join(c + "██\033[0m" for c in [cT,cs,cn,ct,CB,cc])
+    BL = "╰" + "─" * max(0, width - (2 * 6) - 9) + " [ "
+    BR = " ] ─╯"
+    if isinstance(cb, list):
+        out.append(wrap(cb[-1][:len(BL)], BL) + pal + wrap(cb[-1][-len(BR):], BR))
+    else:
+        out.append(cb + BL + pal + cb + BR)
+    out.append(R)
+    return "\n".join(out)
+
+functions = None
+idf = {}
+def getFuncs():
+    functions = []        
+    current_module = globals().get("__name__", "__main__")                
+    for name, obj in globals().items():
+        if inspect.isfunction(obj) and getattr(obj, "__module__", "") == current_module:    
+            functions.append(name)
+    functions.sort(key=str.lower)
+    letter = ""
+    for i, f in enumerate(functions):
+        if f[0].upper() != letter:
+            letter = f[0].upper()
+            functions.insert(i, f"--{letter}--")
+    i = 0
+    idf = {}
+    for idx, f in enumerate(functions):
+        if f[0] != "-":
+            functions[idx] = f"{i}. {f}"
+            idf[i] = f
+            i += 1
+    return functions, idf
+
+def main_menu(
+    width: int = 120,                  # colors:
+    cT: str      = rgb(0, 255, 255),   # Title
+    cs: str      = rgb(255, 180, 0),   # section
+    cn: str      = rgb(255, 100, 180), # name
+    ct: str      = rgb(220, 220, 220), # text
+    cb: str|list = rgb(100, 100, 100), # border
+    cc: str      = rgb(100, 255, 150), # code
+    chrome: bool = False, #makes border color cool.
+    ):
+    """
+    a helper func that prints all funcs in the current file.
+
+    Args:
+        width:
+            the width of the box
+        cT:
+            color of the Title
+        cs:
+            color of the section Titles
+        cn:
+            color for name of the function
+        cb:
+            color of the border
+        cc:
+            color of code
+        chrome:
+            if border is rainbow
+
+    Returns:
+        A printable menu
+    
+    Example:
+        >>> print(main_menu())
+
+    Notes:
+        Use a list in the colors for cool text, uses wrap.
+    """
+    global functions, idf
+    if functions is None:
+        functions, idf = getFuncs()
+
+    R = "\033[0m"
+    usable_width = width - 4
+    
+    max_len = max((len(f) for f in functions), default=10)
+    col_width = max(max_len + 4, 24)
+    num_cols = max(1, usable_width // col_width)
+    col_width = usable_width // num_cols
+    
+    num_rows = (len(functions) + num_cols - 1) // num_cols
+    grid_rows = []
+    for r_idx in range(num_rows):
+        row_items = []
+        for c_idx in range(num_cols):
+            f_idx = c_idx * num_rows + r_idx
+            if f_idx < len(functions):
+                row_items.append(functions[f_idx])
+            else:
+                row_items.append("")
+        grid_rows.append(row_items)
+    
+    RL = [col_width * num_cols] * num_rows
+    flist = []
+    for row in grid_rows:
+        formatted_cols = []
+        for item in row:
+            if item:
+                display_str = f"- {item}"
+                padded = (cs if display_str[2] == "-" else cn) + display_str.ljust(col_width) + R
+            else:
+                padded = " " * col_width
+            formatted_cols.append(padded)
+        flist.append("".join(formatted_cols))
+    for i in range(len(flist)):
+        flist[i] += " " * (width - RL[i] - 4)
+
+    CB = cb[0] if isinstance(cb, list) else cb
+    
+    if chrome:
+        try:
+            g = gradient4(Irgb(cT), Irgb(cc), Irgb(cn), Irgb(cs), width, max(2, 2 + len(flist)), matrix=True)
+            cb = [[rgb(*color) for color in i] for i in g]
+        except NameError:
+            # Fallback if Irgb helper is missing in current scope
+            g = gradient4((0, 255, 255), (100, 255, 150), (255, 100, 180), (255, 180, 0), width, max(2, 2 + len(flist)), matrix=True)
+            cb = [[rgb(*color) for color in i] for i in g]
+        
+    cbl = [row[0] for row in cb] if isinstance(cb, list) else cb
+    cbr = [row[-1] for row in cb] if isinstance(cb, list) else cb
+    cbi = 0
+
+    out = []
+    O = []
+    
+    for j in flist:
+        border_l = cbl[cbi % len(cbl)] if isinstance(cbl, list) else cbl
+        border_r = cbr[cbi % len(cbr)] if isinstance(cbr, list) else cbr
+        O.append(f"{border_l}│ {j}{border_r} │")
+        cbi += 1
+
+    if isinstance(cb, list):
+        out.append(wrap(cb[0], "╭" + "─" * (width - 2) + "╮"))
+    else:
+        out.append(cb + "╭" + "─" * (width - 2) + "╮")        
+    
+    for i in O: 
+        out.append(i)
+        
+    pal = "".join(c + "██\033[0m" for c in [cT, cs, cn, ct, CB, cc])
+    BL = "╰" + "─" * max(0, width - (2 * 6) - 9) + " [ "
+    BR = " ] ─╯"
+    
+    if isinstance(cb, list):
+        out.append(wrap(cb[-1][:len(BL)], BL) + pal + wrap(cb[-1][-len(BR):], BR))
+    else:
+        out.append(cb + BL + pal + cb + BR)
+        
+    out.append(R)
+    return "\n".join(out)
+
+history = []
+def doc_cmd(
+        width: int = W,                    # colors:
+        cT: str      = rgb(0, 255, 255),   # Title
+        cs: str      = rgb(255, 180, 0),   # section
+        cn: str      = rgb(255, 100, 180), # name
+        ct: str      = rgb(220, 220, 220), # text
+        cb: str|list = rgb(100, 100, 100), # border
+        cc: str      = rgb(100, 255, 150), # code
+        chrome: bool = True, #makes border color cool.
+    ):
+    current_view = ".menu"
+    MMD = False
+    favorites = []
+    while True:
+        clear()        
+        b_col = rgb(100, 100, 100)
+        txt_col = rgb(220, 220, 220)
+        print(f"{b_col}╭{'─' * (width - 2)}╮\033[0m")
+        msgs = [
+            "  Type a function name to see the help card for that func.",
+            "  Type '.menu' to see all functions, '.back' to go to the previous func",
+            " or '.quit' to exit."
+        ]
+        for m in msgs:
+            pad = (width - 2) - len(m)
+            print(f"{b_col}│{txt_col}{m}{' ' * pad}{b_col}│\033[0m")
+        print(f"{b_col}╰{'─' * (width - 2)}╯\033[0m\n")
+        BACK = False
+        if current_view in [".back", ".b"]:
+            if history: history.pop()
+            current_view = history.pop() if history else ".menu"
+        if current_view in [".menu",".m","\n"]:
+            print(main_menu(width,cT,cs,cn,ct,cb,cc,chrome))
+        elif current_view[0] in [str(i) for i in range(10)]:
+            try: current_view = int(current_view)
+            except:
+                current_view = ".menu" 
+                continue
+            current_view = idf.get(current_view,current_view)
+            if isinstance(current_view,str):
+                func_obj = globals().get(current_view)
+                if callable(func_obj):
+                    print(pretty_doc(func_obj, width, cT, cs, cn, ct, cb, cc, chrome=chrome))
+                    history.append(current_view)
+                else:
+                    print(f"error. try it again.")
+            else:
+                print(f"No func found for id: {current_view}")
+                current_view = ".menu"
+        elif current_view in [".h",".help",".?"]:
+            # todo: fav, sort, sr, mx
+            COMMANDS = [
+                (".b / .back",                            "goes back to previous func"),
+                (".m / .menu",                            "goes to main menu with all function names."),
+                (".run / .r / .example",                  "runs the example code in a docstring if one exists, and gives the return value."),
+                (".c / .copy",                            "copies the example code to clipboard"),
+                ("id / function name",                    "prints a stylized doc card for that function."),
+                (".f [id/name] / .fav [id/name]",         "favorites that function. if no name or id is specified it will print the favorites page."),
+                (".s / .sort",                            "cycles the sorting method [A-Z,order]"),
+                (".sr",                                   "toggles sort in reverse."),
+                (".mx [funcnames] / .multix [funcnames]", "prints multiple doc cards split among x axis."),
+                (".my [funcnames] / .multiy [funcnames]", "prints multiple doc cards split among y axis."),
+                (".C [id] [str2] / .color [id] [str2]",   "sets id (0...5), to be the color str (rgb sep by space, or hex)"),
+                (".t [list] / .theme [list]",             ".color but for each one in one go. (list, is sep by space of hex only)"),
+                (".rgb int int int [cf/cb/c/ ]",          "prints rgb color in ANSI, and copies fg for cf, bg for cb (doesn't copy color to clipboard by default.)"),
+                (".q / .quit / ctrl+c",                   "quits the program"),
+                (".h / .help / .?",                       "prints this help menu."),]
+            R = "\033[0m"
+            inner = width - 4
+            def row(text, color):
+                pad = " " * max(0, inner - len(text))
+                return f"{cb}│ {color}{text}{R}{pad}{cb} │{R}"
+            lines = [f"{cb}╭{'─' * (width - 2)}╮{R}"]
+            lines.append(row("Commands", cT))
+            lines.append(row("", ct))
+            for cmd, desc in COMMANDS:
+                lines.append(row(cmd, cn))
+                for wrapped_line in textwrap.wrap(desc, width=inner - 2):
+                    lines.append(row(f"  {wrapped_line}", ct))
+            lines.append(f"{cb}╰{'─' * (width - 2)}╯{R}")
+            print("\n".join(lines))
+        elif current_view in [".d",".debug"]:
+            MMD = not MMD
+            if history == []: current_view = ".m"
+            else: current_view = history[-1]
+            continue
+        elif current_view.startswith((".run", ".example",".r",".copy",".c")):
+            cvl = current_view.split(" ")
+            if not history or (history[-1].startswith('.') and not history[-1].startswith(".my") and not len(cvl) == 2):
+                print(f"{rgb(255, 100, 100)}[!] Error: .run no work on cmd's.\033[0m")
+            else:
+                if len(cvl) == 1 and not history[-1].startswith(".my"): func_name = [history[-1]]
+                elif len(cvl) == 2 and cvl[1] in [str(i) for i in range(10)]: func_name = [idf[int(cvl[1])]]
+                elif len(cvl) == 2: func_name = [cvl[1]]
+                elif history[-1].startswith(".my"): func_name = list(history[-1].split(" ")[1:])
+                else: func_name = list(idf[int(i)] if i[1] in [str(i) for i in range(10)] else i for i in cvl[1:])
+                func_obj = list(globals().get(i) for i in func_name)
+                docs = list(inspect.getdoc(i) if i else "" for i in func_obj)
+                for idx, doc in enumerate(docs):
+                    if not doc:
+                        print(f"{rgb(255, 100, 100)} no docstring found for '{func_name[idx]}'.\033[0m")
+                    else:
+                        lines = doc.expandtabs(4).splitlines()
+                        example_lines = []
+                        capturing = False
+                        for line in lines:
+                            stripped = line.strip()
+                            if stripped.startswith("Example") or stripped.startswith("Examples"):
+                                capturing = True
+                                continue
+                            elif capturing and stripped and not line.startswith("    "):
+                                if stripped.endswith(":") or stripped in ["Notes:", "Args:", "Returns:"]:
+                                    capturing = False
+                            
+                            if capturing:
+                                stripped_line = line.strip()
+                                if stripped_line.startswith(">>> "):
+                                    example_lines.append(stripped_line[4:])
+                                elif stripped_line.startswith("... "):
+                                    example_lines.append(stripped_line[4:])
+                        
+                        if not example_lines:
+                            print(f"{rgb(255, 100, 100)} no valid examples found in '{func_name[idx]}' docstring.\033[0m")
+                        else:
+                            code = "\n".join(example_lines)
+                            if current_view in [".run", ".example",".r"]:
+                                print(f"\033[0m{rgb(100, 255, 150)}[*] Running: [for: {func_name[idx]}]\033[0m\n")
+                                try:
+                                    tree = ast.parse(code)                            
+                                    if tree.body and isinstance(tree.body[-1], ast.Expr):
+                                        last_expr = tree.body.pop()                                
+                                        if tree.body:
+                                            exec(compile(tree, filename="<ast>", mode="exec"), globals())                                
+                                        result = eval(compile(ast.Expression(last_expr.value), filename="<ast>", mode="eval"), globals())                                
+                                        if result is not None:
+                                            print(f"\n{rgb(100, 255, 255)}[Return Value]:\033[0m {repr(result)}")
+                                    else:
+                                        exec(code, globals())
+                                except Exception as e:
+                                    print(f"\n{rgb(255, 100, 100)} Error executing example: {e}\033[0m")
+                            else:
+                                copy(code)
+                                print(f"{rgb(100, 255, 150)}[*] copied.\033[0m\n")
+        elif current_view.startswith((".C",".color")):
+            cvl = current_view.split(" ")
+            id = cvl[1]
+            if len(cvl) == 3:
+                v = rgb(HEXtoRGB(cvl[2]))
+            else:
+                v = cvl
+                v = rgb(int(v[2]),int(v[3]),int(v[4]))
+            match int(id):
+                case 0: cT = v
+                case 1: cs = v
+                case 2: cn = v
+                case 3: ct = v
+                case 4: cb = v
+                case 5: cc = v
+            history.append(" ")
+            current_view = ".b"
+            continue
+        elif current_view.startswith((".t",".theme")):
+            cvl = current_view.split(" ")
+            if len(cvl) == 7:
+                v = tuple(rgb(HEXtoRGB(cvl[i + 1])) for i in range(6))
+                cT, cs, cn, ct, cb, cc = v
+            else: print("Must be list separated by spaces, and must be hex.")
+            history.append(" ")
+            current_view = ".b"
+            continue
+        elif current_view.startswith(".rgb"):
+            cvl = current_view.split(" ")
+            try:
+                vf = rgb(int(cvl[1]),int(cvl[2]),int(cvl[3]))
+            except:
+                print("rgb values must be valid int's")
+                vf = color()
+            print("fg code: " + repr(vf) + f" {vf}.:-=+*#%@█\033[0m")
+            try:
+                vb = rgb(int(cvl[1]),int(cvl[2]),int(cvl[3]),m="b")
+            except:
+                print("rgb values must be valid int's")
+                vb = color(m="b")
+            print("bg code: " + repr(vb) + f" {vb}.:-=+*#%@█\033[0m")
+            if len(cvl) == 5:
+                if   cvl[4] == "cf": copy(repr(vf))
+                elif cvl[4] == "cb": copy(repr(vb))
+                else: copy(repr(vf))
+        elif current_view.startswith(".my"):
+            cvl = current_view.split(" ")[1:]
+            ph = False
+            for i in cvl:
+                func_obj = globals().get(i)
+                if callable(func_obj):
+                    print(pretty_doc(func_obj, width,cT,cs,cn,ct,cb,cc,chrome=chrome))
+                    ph = True
+                else:
+                    print(f"{rgb(255, 100, 100)} no valid func found named: '{i}'\033[0m\n")
+            if ph: history.append(current_view)    
+        elif current_view in [".q",".quit"]:
+            break
+        else:
+            func_obj = globals().get(current_view)
+            if callable(func_obj):
+                print(pretty_doc(func_obj, width,cT,cs,cn,ct,cb,cc,chrome=chrome))
+                history.append(current_view)
+            else:
+                print(f"{rgb(255, 100, 100)} no valid func found named: '{current_view}'\033[0m\n")
+        
+        if MMD:
+            print(f"[DEBUG]: {current_view=},{history=},{len(history)=},{len(idf)=}")
+        user_input = input("\n\033[0m>>> ").strip()
+        
+        if user_input.lower() in [".quit", ".exit", ".q"]:
+            break
+        elif user_input:
+            current_view = user_input
 
 class mediaControl:
     def __init__(self):
@@ -2959,6 +3572,5 @@ if __name__ == "__main__":
     #sixtelDemo()
     #themeselect()
     #main()
-    
-    gradientDemo()
+    doc_cmd()
     input()

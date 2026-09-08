@@ -3,6 +3,58 @@ import re
 import textwrap
 import os
 from typing import Callable, Any, Dict, List
+import ast
+import subprocess
+
+def copy(text: str) -> None:
+    """
+    copies text to clipboard
+    
+    Args:
+        text:
+            The text you want copied
+    
+    Returns:
+        None
+    
+    Example:
+        >>> copy("wow :)")
+    
+    Notes:
+        windows only support
+        (can print stuff.)
+    """
+    try:
+        subprocess.run('clip.exe', input=text, text=True, check=True)
+    except Exception as e:
+        print(f"error: {e}")
+
+def color(name:str="default", m:str="f", bright:bool=False) -> str:
+    """
+    give the name of one of the 9 base colors, and get the ANSI escape code for it.
+    
+    Args:
+        name:
+            the name of the color (must be in list)
+            ["black","red","green","yellow","blue","magenta","cyan","white",None,"default"]
+        m:
+            determines weather the color will be applied to the text or bg. 
+            ("f" for text/"b" for back ground)
+        bright:
+            makes the color brighter if True, is not same as bold.
+    
+    Returns:
+        The ANSI escape code for your color.
+    Example:
+        >>> print(color("red")+"hello"+color())
+        >>> # prints a red hello
+    Notes:
+        default is same as reset for `m` (so will reset foreground color if m == "f" else reset bg color)
+    """
+    names = ["black","red","green","yellow","blue","magenta","cyan","white",None,"default"]
+    return f"\033[{names.index(name.lower()) + 30 + (10 if m.lower()[0] == 'b' else 0) + (60 if bright else 0)}m" if name else ""
+
+
 def rgb(*args, m:str="f", Max:float=255) -> str:
     """
     returns the ANSI escape sequence for a rgb color.
@@ -192,8 +244,14 @@ def wrap(colors:list, s:str=" ",p:str|tuple[str]|None=None, end:str="\033[0m") -
     
     Example:
         >>> # prints the text with a block font and 4 color gradient.
-        >>> banner = text2art("HELLO \n WORLD", font="block")
-        >>> lines = banner.splitlines()
+        >>> banner = [
+        >>> '██╗  ██╗███████╗██╗     ██╗      ██████╗     ██╗    ██╗ ██████╗ ██████╗ ██╗     ██████╗ ',
+        >>> '██║  ██║██╔════╝██║     ██║     ██╔═══██╗    ██║    ██║██╔═══██╗██╔══██╗██║     ██╔══██╗',
+        >>> '███████║█████╗  ██║     ██║     ██║   ██║    ██║ █╗ ██║██║   ██║██████╔╝██║     ██║  ██║',
+        >>> '██╔══██║██╔══╝  ██║     ██║     ██║   ██║    ██║███╗██║██║   ██║██╔══██╗██║     ██║  ██║',
+        >>> '██║  ██║███████╗███████╗███████╗╚██████╔╝    ╚███╔███╔╝╚██████╔╝██║  ██║███████╗██████╔╝',
+        >>> '╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝ ╚═════╝      ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝ ']
+        >>> lines = banner
         >>> w = max(len(line) for line in lines)
         >>> h = len(lines)
         >>> 
@@ -421,21 +479,18 @@ def pretty_doc(
     out.append(R)
     return "\n".join(out)
 
-if __name__ == "__main__":
-    print(pretty_doc(rgb, 120, chrome=True))
-input()
 
 functions = None
 
 def main_menu(
     width: int = 120,                  # colors:
-    cT: str|list = rgb(0, 255, 255),   # Title
-    cs: str|list = rgb(255, 180, 0),   # section
-    cn: str|list = rgb(255, 100, 180), # name
-    ct: str|list = rgb(220, 220, 220), # text
+    cT: str      = rgb(0, 255, 255),   # Title
+    cs: str      = rgb(255, 180, 0),   # section
+    cn: str      = rgb(255, 100, 180), # name
+    ct: str      = rgb(220, 220, 220), # text
     cb: str|list = rgb(100, 100, 100), # border
-    cc: str|list = rgb(100, 255, 150), # code
-    chrome: bool = False
+    cc: str      = rgb(100, 255, 150), # code
+    chrome: bool = False, #makes border color cool.
     ):
     """
     a helper func that prints all funcs in the current file.
@@ -466,65 +521,73 @@ def main_menu(
         Use a list in the colors for cool text, uses wrap.
     """
     global functions
-    if functions == None:
+    if functions is None:
         functions = []        
         current_module = globals().get("__name__", "__main__")                
         for name, obj in globals().items():
             if inspect.isfunction(obj) and getattr(obj, "__module__", "") == current_module:    
                 functions.append(name)
         functions.sort()
+
+    flist = []
+    r = []
+    l = 0
+    R = "\033[0m"
+    
+    for f in functions:
+        item = f"- {f}"
+        if l + len(item) + 2 <= width - 4:
+            r.append(item)
+            l += len(item) + 2
+        else:
+            if r:
+                flist.append(r)
+            r = [item]
+            l = len(item) + 2
+            
+    if r:
+        flist.append(r)
+        
+    CB = cb[0] if isinstance(cb, list) else cb
     
     if chrome:
-        raw_grad = gradient4(
-            Irgb(cT),
-            Irgb(cc),
-            Irgb(cn),
-            Irgb(cs),
-            width, max(2,total_rows), matrix=True
-        )
-        cb = [[rgb(*color) for color in i] for i in raw_grad]    
+        g = gradient4(Irgb(cT), Irgb(cc), Irgb(cn), Irgb(cs),width, max(2, 2 + len(flist)), matrix=True)
+        cb = [[rgb(*color) for color in i] for i in g]    
+        
     cbl = [row[0] for row in cb] if isinstance(cb, list) else cb
     cbr = [row[-1] for row in cb] if isinstance(cb, list) else cb
     cbi = 0
 
     out = []
-    # "╭─╮╰╯│"
     O = []
-    n = 0
-    R = "\033[0m"
-    j = ""
-    for f in functions:
-        Row = ""
-        n += 1
-        j += str(f)
-        if n == 3:
-            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
-            cbi += 1
-            if Row:
-                O.append(Row[:-1])
-            n = 0
-            j = ""
-        else:
-            n += 1
+    
+    for row in flist:
+        j = "  ".join(row) 
+        O.append(f"{cbl[cbi % len(cbl)] if isinstance(cbl, list) else cbl}│ {cs}{j}{R}" + " " * max(0, width - 4 - len(j)) + f"{cbr[cbi % len(cbr)] if isinstance(cbr, list) else cbr} │")
+        cbi += 1
+
     if isinstance(cb, list):
         out.append(wrap(cb[0], "╭" + "─" * (width - 2) + "╮"))
     else:
-        out.append(cb + "╭" + "─" * (width - 2) + "╮")
-    for i in O: out.append(i)
-    pal = "".join(c + "██\033[0m" for c in [cT,cs,cn,ct,CB,cc])
+        out.append(cb + "╭" + "─" * (width - 2) + "╮")        
+    for i in O: 
+        out.append(i)
+        
+    pal = "".join(c + "██\033[0m" for c in [cT, cs, cn, ct, CB, cc])
     BL = "╰" + "─" * max(0, width - (2 * 6) - 9) + " [ "
     BR = " ] ─╯"
+    
     if isinstance(cb, list):
         out.append(wrap(cb[-1][:len(BL)], BL) + pal + wrap(cb[-1][-len(BR):], BR))
     else:
         out.append(cb + BL + pal + cb + BR)
+        
     out.append(R)
     return "\n".join(out)
 
 history = []
 HI = -2
-if __name__ == "__main__":
-    
+if __name__ == "__main__": 
     current_view = ".menu"
     
     while True:
@@ -547,12 +610,63 @@ if __name__ == "__main__":
                 print(f"{rgb(255, 100, 100)}[!] Error: no previous menu.\033[0m\n")
             current_view = history[HI]
             BACK = True
-        if current_view in [".menu",".m"]:
+        if current_view in [".menu",".m","\n"]:
             print(main_menu(120))
             HI = HI - 1 if BACK else -2
             if not BACK: history.append(current_view)
         elif current_view == ".h":
             print(history)
+        elif current_view in [".run", ".example",".r",".copy",".c"]:
+            if not history or history[-1].startswith('.'):
+                print(f"{rgb(255, 100, 100)}[!] Error: .run no work on cmd's.\033[0m")
+            else:
+                func_name = history[-1]
+                func_obj = globals().get(func_name)
+                doc = inspect.getdoc(func_obj) if func_obj else ""
+                if not doc:
+                    print(f"{rgb(255, 100, 100)} no docstring found for '{func_name}'.\033[0m")
+                else:
+                    lines = doc.expandtabs(4).splitlines()
+                    example_lines = []
+                    capturing = False
+                    for line in lines:
+                        stripped = line.strip()
+                        if stripped.startswith("Example") or stripped.startswith("Examples"):
+                            capturing = True
+                            continue
+                        elif capturing and stripped and not line.startswith("    "):
+                            if stripped.endswith(":") or stripped in ["Notes:", "Args:", "Returns:"]:
+                                capturing = False
+                        
+                        if capturing:
+                            stripped_line = line.strip()
+                            if stripped_line.startswith(">>> "):
+                                example_lines.append(stripped_line[4:])
+                            elif stripped_line.startswith("... "):
+                                example_lines.append(stripped_line[4:])
+                    
+                    if not example_lines:
+                        print(f"{rgb(255, 100, 100)} no valid examples found in '{func_name}' docstring.\033[0m")
+                    else:
+                        code = "\n".join(example_lines)
+                        if current_view in [".run", ".example",".r"]:
+                            print(f"{rgb(100, 255, 150)}[*] Running: \033[0m\n")
+                            try:
+                                tree = ast.parse(code)                            
+                                if tree.body and isinstance(tree.body[-1], ast.Expr):
+                                    last_expr = tree.body.pop()                                
+                                    if tree.body:
+                                        exec(compile(tree, filename="<ast>", mode="exec"), globals())                                
+                                    result = eval(compile(ast.Expression(last_expr.value), filename="<ast>", mode="eval"), globals())                                
+                                    if result is not None:
+                                        print(f"\n{rgb(100, 255, 255)}[Return Value]:\033[0m {repr(result)}")
+                                else:
+                                    exec(code, globals())
+                            except Exception as e:
+                                print(f"\n{rgb(255, 100, 100)} Error executing example: {e}\033[0m")
+                        else:
+                            copy(code)
+                            print(f"{rgb(100, 255, 150)}[*] copied.\033[0m\n")
         else:
             func_obj = globals().get(current_view)
             if callable(func_obj):
@@ -560,7 +674,7 @@ if __name__ == "__main__":
                 HI = HI - 1 if BACK else -2
                 if not BACK: history.append(current_view)
             else:
-                print(f"{rgb(255, 100, 100)}[!] Error: No valid func found named '{current_view}'\033[0m\n")
+                print(f"{rgb(255, 100, 100)} no valid func found named: '{current_view}'\033[0m\n")
         
         user_input = input("\n>>> ").strip()
         
