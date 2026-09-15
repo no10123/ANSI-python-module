@@ -82,7 +82,39 @@ def style(line):
             4: "heading4", 5: "heading5", 6: "heading6",
         }
         line = wrap(heading_match, heading_styles[len(heading_match.group(1))])
-    
+    elif re.match(r"^\s*(```|~~~)", line):
+        print(color("magenta", bright=True) + line + color())
+        return
+    elif re.match(r"^\s*([-*_])(?:\s*\1){2,}\s*$", line):
+        print(color("magenta", bright=True) + line + color())
+        return
+    elif re.match(r"^\s*(?:<!--|\[\^.*\]:)", line):
+        print(color("black", bright=True) + line + color())
+        return
+    elif re.match(r"^\s*>", line):
+        line = styles["quote"] + line + color()
+    elif re.match(r"^\s*(?:[-+*]|\d+\.)\s+(?:\[[ xX]\]\s+)?", line):
+        line = re.sub(
+            r"^(\s*(?:[-+*]|\d+\.)(?:\s+\[[ xX]\])?)",
+            lambda match: styles["list"] + match.group(1) + color(),
+            line,
+        )
+    elif re.match(r"^\s*\|", line):
+        line = color("cyan") + line + color()
+
+    line = re.sub(r"(?<!\\)(\*\*|__)(.+?)\1", lambda match: wrap(match, "bold", 2), line)
+    line = re.sub(r"(?<!\\)(~~)(.+?)\1", lambda match: wrap(match, "strike", 2), line)
+    line = re.sub(r"(?<!\\)(==)(.+?)\1", lambda match: wrap(match, "highlight", 2), line)
+    line = re.sub(r"(?<![\\*])\*([^*\n]+?)\*(?!\*)", lambda match: wrap(match, "italic", 1), line)
+    line = re.sub(r"(?<![\\_])_([^_\n]+?)_(?!\_)", lambda match: wrap(match, "italic", 1), line)
+    line = re.sub(r"(`+)(.+?)\1", lambda match: wrap(match, "code", 2), line)
+    line = re.sub(
+        r"(!?\[[^\]]+\]\([^\)]+\))",
+        lambda match: wrap(match, "link", 1),
+        line,
+    )
+    line = re.sub(r"(?<!\\)~([^~\n]+?)~", lambda match: wrap(match, "code", 1), line)
+    line = re.sub(r"(?<!\\)\^([^\^\n]+?)\^", lambda match: wrap(match, "code", 1), line)
     print(line)
 
 with open("README.md", "r") as file:
