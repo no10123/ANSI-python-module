@@ -39,3 +39,67 @@ used [ANSI Escape Sequences](https://gist.github.com/fnky/458719343aabd01cfb17a3
 btop4win - for most of the themes folder.
 
 built for stardance
+
+# 1
+## 2
+### 3
+#### 4
+##### 5
+###### 6
+
+**bold**
+*itaclic*
+~~cross~~
+***both***
+<!-- Unordered List -->
+- Item 1
+* Item 2
++ Item 3
+
+<!-- Ordered List -->
+1. First item
+2. Second item
+
+<!-- Nested List (Indent 4 spaces or 1 tab) -->
+1. First item
+    - Sub-item A
+    - Sub-item B
+<!-- Link -->
+[Visit Google](https://google.com)
+
+<!-- Image -->
+![Alt text for image](https://example.com)
+> This is a blockquote.
+>
+>> This is a nested blockquote.
+Use `code` inline to highlight variables.
+
+Indented code blocks use 4 spaces or 1 tab.
+---
+***
+___
+
+<!-- Line Break: End a sentence with two spaces, or use <br> -->
+First line with two spaces at the end.  
+Second line.
+```javascript
+function greet() {
+  console.log("Hello, world!");
+}
+```
+
+| Header 1 | Header 2 | Header 3 |
+| :--- | :---: | ---: |
+| Left-aligned | Center-aligned | Right-aligned |
+| Text | Text | Text |
+- [x] Completed task
+- [ ] Incomplete task
+~~Strikethrough text~~
+==Highlighted text==
+Subscript: H~2~O
+Superscript: X^2^
+Here is a footnote reference.[^1]
+
+[^1]: This is the text explaining the footnote.
+\*This will print literal asterisks and not bold text\*
+\# This will print a literal hashtag instead of a header
