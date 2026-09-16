@@ -1797,6 +1797,25 @@ def pretty_doc(
     out.append(R)
     return "\n".join(out)
 
+def _resolve_func_name(value):
+    if value is None:
+        return None
+
+    if isinstance(value, int):
+        return idf.get(value)
+
+    name = str(value).strip()
+    if not name:
+        return None
+
+    if name.isdigit():
+        return idf.get(int(name))
+
+    if ". " in name:
+        name = name.rsplit(". ", 1)[-1]
+
+    return name if callable(globals().get(name)) else None
+
 functions = None
 idf = {}
 def getFuncs():
@@ -1829,6 +1848,7 @@ def main_menu(
     cb: str|list = rgb(100, 100, 100), # border
     cc: str      = rgb(100, 255, 150), # code
     chrome: bool = False, #makes border color cool.
+    funcs:list|None = None
     ):
     """
     a helper func that prints all funcs in the current file.
@@ -1861,6 +1881,8 @@ def main_menu(
     global functions, idf
     if functions is None:
         functions, idf = getFuncs()
+    if funcs:
+        functions = [f for f in functions if _resolve_func_name(f) in {resolved for item in funcs for resolved in [_resolve_func_name(item)] if resolved}]
 
     R = "\033[0m"
     usable_width = width - 4
@@ -1889,8 +1911,8 @@ def main_menu(
         for item in row:
             if item:
                 display_str = f"- {item}"
-                func_name = item.split(". ")[1] if ". " in item else item
-                func_obj = globals().get(func_name)
+                func_name = _resolve_func_name(item)
+                func_obj = globals().get(func_name) if func_name else None
                 has_docstring = callable(func_obj) and bool(inspect.getdoc(func_obj))
                 color = cn if has_docstring else ct
                 padded = (cs if display_str[2] == "-" else color) + display_str.ljust(col_width) + R
@@ -1908,7 +1930,6 @@ def main_menu(
             g = gradient4(Irgb(cT), Irgb(cc), Irgb(cn), Irgb(cs), width, max(2, 2 + len(flist)), matrix=True)
             cb = [[rgb(*color) for color in i] for i in g]
         except NameError:
-            # Fallback if Irgb helper is missing in current scope
             g = gradient4((0, 255, 255), (100, 255, 150), (255, 100, 180), (255, 180, 0), width, max(2, 2 + len(flist)), matrix=True)
             cb = [[rgb(*color) for color in i] for i in g]
         
@@ -1941,9 +1962,12 @@ def main_menu(
         out.append(wrap(cb[-1][:len(BL)], BL) + pal + wrap(cb[-1][-len(BR):], BR))
     else:
         out.append(cb + BL + pal + cb + BR)
-        
+
+    if funcs:
+        functions, idf = getFuncs()
     out.append(R)
     return "\n".join(out)
+
 
 history = []
 def doc_cmd(
@@ -2006,8 +2030,10 @@ def doc_cmd(
                 (".f [id/name] / .fav [id/name]",         "favorites that function. if no name or id is specified it will print the favorites page."),
                 (".s / .sort",                            "cycles the sorting method [A-Z,order]"),
                 (".sr",                                   "toggles sort in reverse."),
-                (".mx [funcnames] / .multix [funcnames]", "prints multiple doc cards split among x axis."),
-                (".my [funcnames] / .multiy [funcnames]", "prints multiple doc cards split among y axis."),
+                (".mx [funcnames]",                       "prints multiple doc cards split among x axis."),
+                (".my [funcnames]",                       "prints multiple doc cards split among y axis."),
+                (".ax [funcnames]",                       "prints the previous doc card in adition to the funcnames split among the x axis."),
+                (".ay [funcnames]",                       "prints the previous doc card in adition to the funcnames split among the y axis."),
                 (".C [id] [str2] / .color [id] [str2]",   "sets id (0...5), to be the color str (rgb sep by space, or hex)"),
                 (".t [list] / .theme [list]",             ".color but for each one in one go. (list, is sep by space of hex only)"),
                 (".rgb int int int [cf/cb/c/ ]",          "prints rgb color in ANSI, and copies fg for cf, bg for cb (doesn't copy color to clipboard by default.)"),
@@ -2153,6 +2179,62 @@ def doc_cmd(
                 lines = [doc[i] if i < len(doc) else " " * ((W-6)//(len(cvl))) for doc in docs]
                 print("  ".join(lines))
             history.append(current_view)
+        elif current_view.startswith(".ax"):
+            av = []
+            if history:
+                if history[-1].startswith((".mx",".my",".ax",".ay")): av = history[-1].split(" ")[1:]
+                else: av = [history[-1]]
+            cvl = av + current_view.split(" ")[1:]
+            docs = [pretty_doc(i, (W-6)//(len(cvl)),cT,cs,cn,ct,cb,cc,chrome=chrome).splitlines() for i in (globals().get(i) for i in cvl) if callable(i)]
+            docs.sort(key=len,reverse=True)
+            for i in range(len(docs[0])):
+                lines = [doc[i] if i < len(doc) else " " * ((W-6)//(len(cvl))) for doc in docs]
+                print("  ".join(lines))
+            history.append(f".ax {' '.join(cvl)}")
+        elif current_view.startswith(".ay"):
+            av = []
+            if history:
+                if history[-1].startswith((".mx",".my",".ax",".ay")): av = history[-1].split(" ")[1:]
+                else: av = [history[-1]]
+            cvl = av + current_view.split(" ")[1:]
+            ph = False
+            for i in cvl:
+                func_obj = globals().get(i)
+                if callable(func_obj):
+                    print(pretty_doc(func_obj, width,cT,cs,cn,ct,cb,cc,chrome=chrome))
+                    ph = True
+                else:
+                    print(f"{rgb(255, 100, 100)} no valid func found named: '{i}'\033[0m\n")
+            if ph: history.append(f".ay {' '.join(cvl)}")
+        elif current_view in [".fm",".fav menu"]:
+            if favorites:
+                print(main_menu(width,cT,cs,cn,ct,cb,cc,chrome,funcs=favorites))
+            else:
+                print("no favorites yet. use '.f [id/name]' to add a favorite.")
+        elif current_view.startswith((".f",".fav")):
+            cvl = current_view.split(" ")
+            if len(cvl) == 1:
+                if history:
+                    if history[-1].startswith((".mx",".my",".ax",".ay")):
+                        cvl += history[-1].split(" ")[1:]
+                    else:
+                        cvl += [history[-1]]
+            else:
+                for raw in cvl[1:]:
+                    func_name = _resolve_func_name(raw)
+                    if func_name is None:
+                        print(f"{rgb(255, 100, 100)} no valid func found for '{raw}'\033[0m\n")
+                        continue
+
+                    if func_name not in favorites:
+                        favorites.append(func_name)
+                    else:
+                        favorites.remove(func_name)
+
+            if history: history.append(history[-1])
+            else: history.append(".menu")
+            current_view = ".back"
+            continue
         elif current_view in [".q",".quit"]:
             break
         else:
