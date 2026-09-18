@@ -1012,12 +1012,66 @@ def renameTerminal(name:str) -> str:
     return f"\033]0;{name}\007\033]9;9;\"{name}\"\007"
 
 def clear_graph_area(x:int, y:int, width:int, height:int):
+    """
+    clears a rect at x,y with a height of h and a width of w.
+    
+    Args:
+        x:
+            The x coordinate of the top left corner of a rectangle.
+        y:
+            The y coordinate of the top-left corner of the rectangle.
+        width:
+            The width of the rectangle.
+        height:
+            The height of the rectangle.
+    
+    Returns:
+        the printable string to clear it.
+    
+    Example:
+        >>> print(clear_graph_area(0, 0, 10, 5))
+    
+    Notes:
+        used by cpu_graph and dual_graph to clear graphing area.
+    """
     out = []
     for row in range(height):
         out.append(f"\x1b[{y + row};{x}H" + (" " * width))
     return "".join(out)
 
 def cpu_graph(x:int, y:int, width:int, height:int, history:list, color, char:str="█", smooth:bool=True, max:float=100.0):
+    """
+    prints a cool cpu graph using history at x,y with a width of w and a height of h.
+    
+    Args:
+        x:
+            The x coordinate of the top left corner of the graph.
+        y:
+            The y coordinate of the top left corner of the graph.
+        width:
+            The width of the graph.
+        height:
+            The height of the graph.
+        history:
+            A list of values for height of the bar at that x
+        color:
+            The color of the graph.
+        char:
+            The character to use for the graph.
+        smooth:
+            Whether to smooth the graph.
+        max:
+            The maximum value for the graph.
+    
+    Returns:
+        The printable string to display the graph.
+    
+    Example:
+        >>> print(cpu_graph(0, 0, 10, 5, [50, 60, 70, 80, 90], "\033[32m"))
+    
+    Notes:
+        can be used for other graphing stuff.
+    """
     if len(color[0]) == 1:
         color = [color] * (height)
     elif len(color) < height:
@@ -1041,6 +1095,38 @@ def cpu_graph(x:int, y:int, width:int, height:int, history:list, color, char:str
     return "".join(out)
 
 def dual_graph(x, y, width, height, c_up, c_down, color, char:str="█"):
+    """
+        prints a cool cpu graph using history at x,y with a width of w and a height of h.
+        
+        Args:
+            x:
+                The x coordinate of the top left corner of the graph.
+            y:
+                The y coordinate of the top left corner of the graph.
+            width:
+                The width of the graph.
+            height:
+                The height of the graph.
+            history:
+                A list of values for height of the bar at that x
+            color:
+                The color of the graph.
+            char:
+                The character to use for the graph.
+            smooth:
+                Whether to smooth the graph.
+            max:
+                The maximum value for the graph.
+        
+        Returns:
+            The printable string to display the graph.
+        
+        Example:
+            >>> print(dual_graph(0, 0, 10, 5, [50, 60, 70, 80, 90], [40, 50, 60, 70, 80], "\033[32m"))
+        
+        Notes:
+            can be used for other graphing stuff.
+        """
     if len(color[0]) == 1:
         color = [color] * (height)
     elif len(color) < height:
@@ -1079,6 +1165,26 @@ def dual_graph(x, y, width, height, c_up, c_down, color, char:str="█"):
     return out
         
 def iprint(msgs:list, end:str="\n", lend:str=""):
+    """
+    a fancy print that can print multiple stuff with custom ending.
+    
+    Args:
+        msgs:
+            A list of strings to print.
+        end:
+            The string to append after the last message.
+        lend:
+            The string to append after each message except the last one.
+    
+    Returns:
+        None
+    
+    Example:
+        >>> iprint([range(10),range(10)],end="\n",lend=" ")
+    
+    Notes:
+        you really don't need this.
+    """
     for i in msgs:
         print(i,end=(end if i == msgs[-1] else lend))
 
@@ -1691,6 +1797,25 @@ def pretty_doc(
     out.append(R)
     return "\n".join(out)
 
+def _resolve_func_name(value):
+    if value is None:
+        return None
+
+    if isinstance(value, int):
+        return idf.get(value)
+
+    name = str(value).strip()
+    if not name:
+        return None
+
+    if name.isdigit():
+        return idf.get(int(name))
+
+    if ". " in name:
+        name = name.rsplit(". ", 1)[-1]
+
+    return name if callable(globals().get(name)) else None
+
 functions = None
 idf = {}
 def getFuncs():
@@ -1723,6 +1848,7 @@ def main_menu(
     cb: str|list = rgb(100, 100, 100), # border
     cc: str      = rgb(100, 255, 150), # code
     chrome: bool = False, #makes border color cool.
+    funcs:list|None = None
     ):
     """
     a helper func that prints all funcs in the current file.
@@ -1755,6 +1881,8 @@ def main_menu(
     global functions, idf
     if functions is None:
         functions, idf = getFuncs()
+    if funcs:
+        functions = [f for f in functions if _resolve_func_name(f) in {resolved for item in funcs for resolved in [_resolve_func_name(item)] if resolved}]
 
     R = "\033[0m"
     usable_width = width - 4
@@ -1783,7 +1911,11 @@ def main_menu(
         for item in row:
             if item:
                 display_str = f"- {item}"
-                padded = (cs if display_str[2] == "-" else cn) + display_str.ljust(col_width) + R
+                func_name = _resolve_func_name(item)
+                func_obj = globals().get(func_name) if func_name else None
+                has_docstring = callable(func_obj) and bool(inspect.getdoc(func_obj))
+                color = cn if has_docstring else ct
+                padded = (cs if display_str[2] == "-" else color) + display_str.ljust(col_width) + R
             else:
                 padded = " " * col_width
             formatted_cols.append(padded)
@@ -1798,7 +1930,6 @@ def main_menu(
             g = gradient4(Irgb(cT), Irgb(cc), Irgb(cn), Irgb(cs), width, max(2, 2 + len(flist)), matrix=True)
             cb = [[rgb(*color) for color in i] for i in g]
         except NameError:
-            # Fallback if Irgb helper is missing in current scope
             g = gradient4((0, 255, 255), (100, 255, 150), (255, 100, 180), (255, 180, 0), width, max(2, 2 + len(flist)), matrix=True)
             cb = [[rgb(*color) for color in i] for i in g]
         
@@ -1831,9 +1962,12 @@ def main_menu(
         out.append(wrap(cb[-1][:len(BL)], BL) + pal + wrap(cb[-1][-len(BR):], BR))
     else:
         out.append(cb + BL + pal + cb + BR)
-        
+
+    if funcs:
+        functions, idf = getFuncs()
     out.append(R)
     return "\n".join(out)
+
 
 history = []
 def doc_cmd(
@@ -1896,8 +2030,10 @@ def doc_cmd(
                 (".f [id/name] / .fav [id/name]",         "favorites that function. if no name or id is specified it will print the favorites page."),
                 (".s / .sort",                            "cycles the sorting method [A-Z,order]"),
                 (".sr",                                   "toggles sort in reverse."),
-                (".mx [funcnames] / .multix [funcnames]", "prints multiple doc cards split among x axis."),
-                (".my [funcnames] / .multiy [funcnames]", "prints multiple doc cards split among y axis."),
+                (".mx [funcnames]",                       "prints multiple doc cards split among x axis."),
+                (".my [funcnames]",                       "prints multiple doc cards split among y axis."),
+                (".ax [funcnames]",                       "prints the previous doc card in adition to the funcnames split among the x axis."),
+                (".ay [funcnames]",                       "prints the previous doc card in adition to the funcnames split among the y axis."),
                 (".C [id] [str2] / .color [id] [str2]",   "sets id (0...5), to be the color str (rgb sep by space, or hex)"),
                 (".t [list] / .theme [list]",             ".color but for each one in one go. (list, is sep by space of hex only)"),
                 (".rgb int int int [cf/cb/c/ ]",          "prints rgb color in ANSI, and copies fg for cf, bg for cb (doesn't copy color to clipboard by default.)"),
@@ -1924,13 +2060,13 @@ def doc_cmd(
             continue
         elif current_view.startswith((".run", ".example",".r",".copy",".c")):
             cvl = current_view.split(" ")
-            if not history or (history[-1].startswith('.') and not history[-1].startswith(".my") and not len(cvl) == 2):
+            if not history or (history[-1].startswith('.') and not history[-1].startswith((".my",".mx")) and not len(cvl) == 2):
                 print(f"{rgb(255, 100, 100)}[!] Error: .run no work on cmd's.\033[0m")
             else:
-                if len(cvl) == 1 and not history[-1].startswith(".my"): func_name = [history[-1]]
+                if len(cvl) == 1 and not history[-1].startswith((".my",".mx")): func_name = [history[-1]]
                 elif len(cvl) == 2 and cvl[1] in [str(i) for i in range(10)]: func_name = [idf[int(cvl[1])]]
                 elif len(cvl) == 2: func_name = [cvl[1]]
-                elif history[-1].startswith(".my"): func_name = list(history[-1].split(" ")[1:])
+                elif history[-1].startswith((".my",".mx")): func_name = list(history[-1].split(" ")[1:])
                 else: func_name = list(idf[int(i)] if i[1] in [str(i) for i in range(10)] else i for i in cvl[1:])
                 func_obj = list(globals().get(i) for i in func_name)
                 docs = list(inspect.getdoc(i) if i else "" for i in func_obj)
@@ -2035,6 +2171,70 @@ def doc_cmd(
                 else:
                     print(f"{rgb(255, 100, 100)} no valid func found named: '{i}'\033[0m\n")
             if ph: history.append(current_view)    
+        elif current_view.startswith(".mx"):
+            cvl = current_view.split(" ")[1:]
+            docs = [pretty_doc(i, (W-6)//(len(cvl)),cT,cs,cn,ct,cb,cc,chrome=chrome).splitlines() for i in (globals().get(i) for i in cvl) if callable(i)]
+            docs.sort(key=len,reverse=True)
+            for i in range(len(docs[0])):
+                lines = [doc[i] if i < len(doc) else " " * ((W-6)//(len(cvl))) for doc in docs]
+                print("  ".join(lines))
+            history.append(current_view)
+        elif current_view.startswith(".ax"):
+            av = []
+            if history:
+                if history[-1].startswith((".mx",".my",".ax",".ay")): av = history[-1].split(" ")[1:]
+                else: av = [history[-1]]
+            cvl = av + current_view.split(" ")[1:]
+            docs = [pretty_doc(i, (W-6)//(len(cvl)),cT,cs,cn,ct,cb,cc,chrome=chrome).splitlines() for i in (globals().get(i) for i in cvl) if callable(i)]
+            docs.sort(key=len,reverse=True)
+            for i in range(len(docs[0])):
+                lines = [doc[i] if i < len(doc) else " " * ((W-6)//(len(cvl))) for doc in docs]
+                print("  ".join(lines))
+            history.append(f".ax {' '.join(cvl)}")
+        elif current_view.startswith(".ay"):
+            av = []
+            if history:
+                if history[-1].startswith((".mx",".my",".ax",".ay")): av = history[-1].split(" ")[1:]
+                else: av = [history[-1]]
+            cvl = av + current_view.split(" ")[1:]
+            ph = False
+            for i in cvl:
+                func_obj = globals().get(i)
+                if callable(func_obj):
+                    print(pretty_doc(func_obj, width,cT,cs,cn,ct,cb,cc,chrome=chrome))
+                    ph = True
+                else:
+                    print(f"{rgb(255, 100, 100)} no valid func found named: '{i}'\033[0m\n")
+            if ph: history.append(f".ay {' '.join(cvl)}")
+        elif current_view in [".fm",".fav menu"]:
+            if favorites:
+                print(main_menu(width,cT,cs,cn,ct,cb,cc,chrome,funcs=favorites))
+            else:
+                print("no favorites yet. use '.f [id/name]' to add a favorite.")
+        elif current_view.startswith((".f",".fav")):
+            cvl = current_view.split(" ")
+            if len(cvl) == 1:
+                if history:
+                    if history[-1].startswith((".mx",".my",".ax",".ay")):
+                        cvl += history[-1].split(" ")[1:]
+                    else:
+                        cvl += [history[-1]]
+            else:
+                for raw in cvl[1:]:
+                    func_name = _resolve_func_name(raw)
+                    if func_name is None:
+                        print(f"{rgb(255, 100, 100)} no valid func found for '{raw}'\033[0m\n")
+                        continue
+
+                    if func_name not in favorites:
+                        favorites.append(func_name)
+                    else:
+                        favorites.remove(func_name)
+
+            if history: history.append(history[-1])
+            else: history.append(".menu")
+            current_view = ".back"
+            continue
         elif current_view in [".q",".quit"]:
             break
         else:
@@ -2067,6 +2267,8 @@ class mediaControl:
         with self.lock:
             print(f"\n{n=}")
             self.seek_frame = n
+
+
 
 control = mediaControl()
 
