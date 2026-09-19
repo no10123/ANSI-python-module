@@ -97,8 +97,8 @@ def fetch_spotlight(dest_folder="./wallpapers"):
                 
     print("[*] Complete!")
 
-clean_and_rename_images("./wallpapers")
+#clean_and_rename_images("./wallpapers")
 
 if __name__ == "__main__":
-    #fetch_spotlight()
+    fetch_spotlight()
     pass

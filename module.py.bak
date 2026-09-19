@@ -1664,60 +1664,6 @@ def wrap(colors:list, s:str=" ",p:str|tuple[str]|None=None, end:str="\033[0m") -
 
 # more fancy stuff
 
-DOC_STYLE = {
-    # recognized when reading an existing docstring (pretty_doc / parse_doc)
-    "section_order": ["Args", "Returns", "Yields", "Raises", "Example", "Notes"],
-    # asked for / written back by the .F form — subset of section_order
-    "form_sections": ["Args", "Returns", "Example", "Notes"],
-
-    # canonical name -> acceptable header text (first alias = what .F writes back)
-    "aliases": {
-        "Args":    ["Args", "Arguments", "Parameters", "Params"],
-        "Returns": ["Returns", "Return"],
-        "Yields":  ["Yields", "Yield"],
-        "Raises":  ["Raises", "Except", "Exceptions"],
-        "Example": ["Example", "Examples"],
-        "Notes":   ["Notes", "Note"],
-    },
-    # how each section's body is structured
-    "kind": {
-        "Args": "args", "Returns": "text", "Yields": "text",
-        "Raises": "text", "Example": "example", "Notes": "text",
-    },
-    # colors keyed by the same "cX" strings pretty_doc already resolves
-    "colors": {
-        "Args": ["cn", "ct"], "Returns": ["ct"], "Yields": ["ct"],
-        "Raises": ["ct"], "Example": ["cc"], "Notes": ["ct"],
-    },
-    "desc_color": ["ct"],
-    "typed_section": "Args",                                    # which section gets [type] auto-inserted
-
-    "header_pattern": r"^[A-Za-z][A-Za-z ]*:\s*$",              # what a header line looks like
-    "underline_pattern": None,                                  # e.g. r"^-{3,}\s*$" for numpy style
-    "example_prefixes": (">>> ", "... "),                       # what to prefix example with
-    "indent_size": 4,                                           # how many spaces in a tab
-}
-
-_UNSET = object()
-
-def style_doc_helper(style):
-    """
-    Flattens a style config into what parse_doc/pretty_doc actually need:
-      alias_lookup: {"parameters:": "Args", "params:": "Args", ...}  (lowercased)
-      headers:      ["Args:", "Arguments:", "Parameters:", ...]       (every alias)
-      color_d:      {"Args:": [...], "Parameters:": [...], ...}       (per-alias, so
-                     whichever alias the docstring actually used still colors right)
-    """
-    alias_lookup, headers, color_d = {}, [], {"Desc": style.get("desc_color", ["ct"])}
-    for canonical in style["section_order"]:
-        colors = style["colors"].get(canonical, ["ct"])
-        for alias in style["aliases"][canonical]:
-            key = f"{alias}:"
-            alias_lookup[key.lower()] = canonical
-            headers.append(key)
-            color_d[key] = colors
-    return alias_lookup, headers, color_d
-
 def pretty_doc(
     func: Callable[..., Any],
     width: int = 70,                   # colors:
@@ -1870,12 +1816,12 @@ def _resolve_func_name(value):
 
     return name if callable(globals().get(name)) else None
 
-def _write_docstring_to_source(func, body_lines):
+def _write_docstring_to_source(func_obj, body_lines):
     """
     writes a doc string into the file, so perma.
     
     Args:
-        func:
+        func_obj:
             the function.
     
         body_lines:
@@ -1891,8 +1837,8 @@ def _write_docstring_to_source(func, body_lines):
         mainly used by doc_menu. 
     """
     try:
-        filepath = inspect.getsourcefile(func)
-        src_lines, start_lineno = inspect.getsourcelines(func)
+        filepath = inspect.getsourcefile(func_obj)
+        src_lines, start_lineno = inspect.getsourcelines(func_obj)
     except (OSError, TypeError) as e:
         return False, f"could not read source: {e}"
 
@@ -1904,13 +1850,22 @@ def _write_docstring_to_source(func, body_lines):
     except (SyntaxError, IndentationError) as e:
         return False, f"could not parse function source (nested/indented func?): {e}"
 
-    func_node = next((n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == func.__name__),None)
+    func_node = next(
+        (n for n in ast.walk(tree)
+         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == func_obj.__name__),
+        None,
+    )
     if func_node is None or not func_node.body:
         return False, "could not locate function body."
+
     first_stmt = func_node.body[0]
     body_indent = " " * first_stmt.col_offset
 
-    has_docstring = (isinstance(first_stmt, ast.Expr) and isinstance(getattr(first_stmt, "value", None), ast.Constant) and isinstance(first_stmt.value.value, str))
+    has_docstring = (
+        isinstance(first_stmt, ast.Expr)
+        and isinstance(getattr(first_stmt, "value", None), ast.Constant)
+        and isinstance(first_stmt.value.value, str)
+    )
 
     new_block = [f'{body_indent}"""\n']
     new_block += [f"{body_indent}{line}\n" if line else "\n" for line in body_lines]
@@ -1941,69 +1896,6 @@ def _write_docstring_to_source(func, body_lines):
         return False, f"write failed: {e}"
 
     return True, filepath
-
-def parse_doc(func):
-    """
-    gets doc data.
-
-    Args:
-        func:
-            the func you want to parse
-    
-    Returns:
-        a dictionary with the lines for each section.
-
-    Example:
-        >>> print(parse_doc(parse_doc))
-    
-    Notes:
-        mainly used by doc_menu. 
-    """
-    doc = inspect.getdoc(func)
-    result = {"desc": [], "args": {}, "returns": [], "example": [], "notes": []}
-    if not doc:
-        return result
-
-    headers_map = {"Args:": "args",       "Arguments:": "args",
-                   "Returns:": "returns", "Yields:": "returns",
-                   "Example:": "example", "Examples:": "example",
-                   "Notes:": "notes",
-                   "Raises:": "raises",}
-
-    LD = doc.expandtabs(4).split("\n")
-    mode = "desc"
-    current_arg = None
-
-    for line in LD:
-        stripped = line.strip()
-        if stripped in headers_map:
-            mode = headers_map[stripped]
-            current_arg = None
-            continue
-
-        if mode == "desc":
-            result["desc"].append(line)
-
-        elif mode == "args":
-            if line[:4] == "    " and line[4:5] not in ("", " "):
-                current_arg = stripped.rstrip(":")
-                result["args"][current_arg] = []
-            elif current_arg is not None:
-                result["args"][current_arg].append(line[8:] if line[:8] == " " * 8 else stripped)
-        
-        elif mode == "returns":
-            result["returns"].append(line[4:] if line[:4] == "    " else stripped)
-
-        elif mode == "example":
-            if stripped.startswith(">>> ") or stripped.startswith("... "):
-                result["example"].append(stripped[4:])
-
-        elif mode == "notes":
-            result["notes"].append(line[4:] if line[:4] == "    " else stripped)
-
-    while result["desc"] and not result["desc"][-1].strip():
-        result["desc"].pop()
-    return result
 
 functions = None
 idf = {}
@@ -2467,23 +2359,9 @@ def doc_cmd(
                         lines.append(line)
                     return lines
 
-                def ask_or_keep(prompt, existing_lines):
-                    if existing_lines and any(l.strip() for l in existing_lines):
-                        print(f"{HL}{prompt}{R}")
-                        preview = " ".join(l.strip() for l in existing_lines if l.strip())
-                        preview = (preview[:77] + "...") if len(preview) > 80 else preview
-                        print(f"{rgb(120, 120, 120)}  existing: \"{preview}\"{R}")
-                        choice = input(f"{cn}  [K]eep / [O]verwrite? {R}").strip().lower()
-                        if choice in ("", "k", "keep"):
-                            return existing_lines
-                        return ask(prompt, multiline=True)
-                    return ask(prompt, multiline=True)
-
-                existing = parse_doc(func_obj)
-
                 print(f"\n{cT}Building docstring for: {cn}{func_name}{R}\n")
 
-                desc_lines = ask_or_keep(f"Description of '{func_name}':", existing["desc"])
+                desc_lines = ask(f"Description of '{func_name}':", multiline=True)
 
                 arg_blocks = []
                 if params:
@@ -2491,12 +2369,12 @@ def doc_cmd(
                     for p, ptype in params.items():
                         t = fmt_type(ptype)
                         label = f"{p}{TY} [{t}]{R}" if t else p
-                        lines = ask_or_keep(f"{label} - description:", existing["args"].get(p))
+                        lines = ask(f"{label} - description:", multiline=True)
                         arg_blocks.append((p, lines))
 
-                ret_lines = ask_or_keep("Returns (optional):", existing["returns"])
-                example_lines = ask_or_keep("Example code, one line per input (optional):", existing["example"])
-                notes_lines = ask_or_keep("Notes (optional):", existing["notes"])
+                ret_lines = ask("Returns (optional):", multiline=True)
+                example_lines = ask("Example code, one line per input (optional):", multiline=True)
+                notes_lines = ask("Notes (optional):", multiline=True)
 
                 body = []
                 body.extend(desc_lines if desc_lines else ["*No description provided.*"])
@@ -2532,8 +2410,8 @@ def doc_cmd(
                 src = '    """\n' + "\n".join(("    " + l if l else "") for l in body) + '\n    """'
                 copy(src)
 
-                print(f"\n{rgb(100, 255, 150)}[*] docstring built for '{func_name}',  "
-                      f" copied to clipboard.\033[0m\n")
+                print(f"\n{rgb(100, 255, 150)}[*] docstring built for '{func_name}' — "
+                      f"applied for this session, copied to clipboard.\033[0m\n")
                 print(pretty_doc(func_obj, width, cT, cs, cn, ct, cb, cc, chrome=chrome))
 
                 save = input(f"\n{HL}Save this to the source file permanently? "
