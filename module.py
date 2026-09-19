@@ -44,7 +44,7 @@ else:
     import select
 import inspect
 import textwrap
-from typing import Callable, Any, Dict, List
+from typing import TypedDict, Literal, Union, Callable, Any
 import ast
 import subprocess
 import difflib
@@ -1664,6 +1664,29 @@ def wrap(colors:list, s:str=" ",p:str|tuple[str]|None=None, end:str="\033[0m") -
 
 # more fancy stuff
 
+Kind = Literal["args", "text", "example"]
+
+class DocStyle(TypedDict):
+    section_order: list[str]
+    form_sections: list[str]
+    aliases: dict[str, list[str]]
+    kind: dict[str, Kind]
+    colors: dict[str, list[str]]
+    desc_color: list[str]
+    typed_section: str | None
+    header_pattern: str
+    underline_pattern: str | None
+    example_prefixes: tuple[str, ...]
+    indent_size: int
+
+ArgsSection = dict[str, list[str]]
+TextSection = list[str]
+ExampleSection = list[str]
+SectionData = Union[ArgsSection, TextSection, ExampleSection]
+
+class ParsedDoc(TypedDict):
+    desc: list[str]
+
 DOC_STYLE = {
     # recognized when reading an existing docstring (pretty_doc / parse_doc)
     "section_order": ["Args", "Returns", "Yields", "Raises", "Example", "Notes"],
@@ -1700,13 +1723,22 @@ DOC_STYLE = {
 
 _UNSET = object()
 
-def style_doc_helper(style):
+def style_doc_helper(style:DocStyle) -> tuple[dict[str, str], list[str], dict[str, list[str]]]:
     """
-    Flattens a style config into what parse_doc/pretty_doc actually need:
-      alias_lookup: {"parameters:": "Args", "params:": "Args", ...}  (lowercased)
-      headers:      ["Args:", "Arguments:", "Parameters:", ...]       (every alias)
-      color_d:      {"Args:": [...], "Parameters:": [...], ...}       (per-alias, so
-                     whichever alias the docstring actually used still colors right)
+    Flattens a style config.
+
+    Args:
+        style:
+            the style dictionary
+
+    Returns:
+         alias_lookup, headers, color_d
+
+    Example:
+        >>> print(style_doc_helper(DOC_STYLE))
+
+    Notes:
+        mainly a helper func
     """
     alias_lookup, headers, color_d = {}, [], {"Desc": style.get("desc_color", ["ct"])}
     for canonical in style["section_order"]:
@@ -1720,17 +1752,17 @@ def style_doc_helper(style):
 
 def pretty_doc(
     func: Callable[..., Any],
-    width: int = 70,                   # colors:
-    cT: str      = rgb(0, 255, 255),   # Title
-    cs: str      = rgb(255, 180, 0),   # section
-    cn: str      = rgb(255, 100, 180), # name
-    ct: str      = rgb(220, 220, 220), # text
-    cb: str|list = rgb(100, 100, 100), # border
-    cc: str      = rgb(100, 255, 150), # code
-    # -- color_d is how each section is styled off of indentation, and headers is the name of each section --
-    color_d:dict = {"Desc": ["ct"],"Args:": ["cn", "ct"],"Returns:": ["ct"],"Example:": ["cc"],"Notes:": ["ct"]},
-    headers:list = ["Args:", "Arguments:", "Returns:", "Yields:", "Raises:", "Example:", "Examples:", "Notes:"],
-    typed:str|None = "Args:", # this is your argument section, will auto apply types if wanted (if not use None).
+    width: int = 70,
+    cT: str      = rgb(0, 255, 255),
+    cs: str      = rgb(255, 180, 0),
+    cn: str      = rgb(255, 100, 180),
+    ct: str      = rgb(220, 220, 220),
+    cb: str|list = rgb(100, 100, 100),
+    cc: str      = rgb(100, 255, 150),
+    style: dict  = DOC_STYLE,
+    color_d: dict|None = None,
+    headers: list|None = None,
+    typed = _UNSET,
     chrome: bool = False
 ) -> str:
     """
@@ -1751,38 +1783,60 @@ def pretty_doc(
             color of the border
         cc:
             color of code
+        style:
+            a DOC_STYLE-shaped dict this card reads header text/colors/indent from.
         color_d:
-            color coding based on indentation for each section.
+            override for style's per-section colors. None derives from style.
         headers:
-            the names of each section
+            override for style's recognized header text. None derives from style.
         typed:
-            your argument section, will auto apply types if wanted (if not use None).
+            which section(s) get auto [type] annotations. Unset derives from
+            style's typed_section; pass None to disable.
+        chrome:
+            makes border color cool.
 
     Returns:
         A printable card
-    
+
     Example:
         >>> print(pretty_doc(pretty_doc, 120))
 
     Notes:
         Use a list in the colors for cool text, uses wrap.
-        """
+        Pass a different `style` dict (see DOC_STYLE) to read non-Google
+        docstring conventions — numpy, reST, or a fully custom layout.
+    """
     doc = inspect.getdoc(func)
     name = getattr(func, "__name__", type(func).__name__)
-
     if not doc:
         doc = "*No docstring provided for this function.*"
 
     try:
         sig = inspect.signature(func)
-        types = {name: (param.annotation if param.annotation != inspect.Parameter.empty else None) for name, param in sig.parameters.items()}
+        types = {p: (param.annotation if param.annotation != inspect.Parameter.empty else None) for p, param in sig.parameters.items()}
     except (ValueError, TypeError):
         types = {}
     sg = str(sig)
     R = "\033[0m"
-    LD = doc.expandtabs(4).split("\n")
-    COLORS = {"cT":cT,"cs":cs,"cn":cn,"ct":ct,"cb":cb,"cc":cc}
+    indent = style["indent_size"]
+    LD = doc.expandtabs(indent).split("\n")
+    COLORS = {"cT": cT, "cs": cs, "cn": cn, "ct": ct, "cb": cb, "cc": cc}
+
+    style_lookup, style_headers, style_color_d = style_doc_helper(style)
+    if headers is None:
+        headers = style_headers
+    if color_d is None:
+        color_d = style_color_d
     color_d = {k: [COLORS.get(c, c) for c in v] for k, v in color_d.items()}
+
+    if typed is _UNSET:
+        typed_canonical = style.get("typed_section")
+        typed_set = {f"{a}:" for a in style["aliases"][typed_canonical]} if typed_canonical else set()
+    elif typed is None:
+        typed_set = set()
+    else:
+        typed_set = {typed} if isinstance(typed, str) else set(typed)
+
     data = {"Desc": []}
     mode = "Desc"
     for d in LD:
@@ -1792,6 +1846,7 @@ def pretty_doc(
                 data[mode] = []
         else:
             data[mode].append(d)
+
     total_rows = 3
     for m, lines in data.items():
         if m != "Desc":
@@ -1799,49 +1854,42 @@ def pretty_doc(
         total_rows += len(lines)
     CB = cb[0] if isinstance(cb, list) else cb
     if chrome:
-        raw_grad = gradient4(
-            Irgb(cT),
-            Irgb(cc),
-            Irgb(cn),
-            Irgb(cs),
-            width, max(2,total_rows), matrix=True
-        )
-        cb = [[rgb(*color) for color in i] for i in raw_grad]    
+        raw_grad = gradient4(Irgb(cT), Irgb(cc), Irgb(cn), Irgb(cs), width, max(2, total_rows), matrix=True)
+        cb = [[rgb(*color) for color in i] for i in raw_grad]
     cbl = [row[0] for row in cb] if isinstance(cb, list) else cb
     cbr = [row[-1] for row in cb] if isinstance(cb, list) else cb
     cbi = 3
 
-    out = []
-    # "╭─╮╰╯│"
-    O = []
+    out, O = [], []
     for mode, lines in data.items():
         Row = ""
         if mode != "Desc":
-            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cs + "-- " + mode + " " + "-" * max(0, width - 8 - len(mode)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
-            cbi += 1            
+            Row += (cbl[cbi % len(cbl)] if isinstance(cbl, list) else cbl) + "│ " + cs + "-- " + mode + " " + "-" * max(0, width - 8 - len(mode)) + (cbr[cbi % len(cbr)] if isinstance(cbr, list) else cbr) + " │\n"
+            cbi += 1
         cl = color_d.get(mode, [ct])
-        
         for j in lines:
-            j = j[4:] if j [:4] == "    " else j
-            I = sum(1 for i in range(0, len(j), 4) if j[i:i+4] == "    ")
-            if mode == typed and I == 0:
+            j = j[indent:] if j[:indent] == " " * indent else j
+            I = sum(1 for i in range(0, len(j), indent) if j[i:i + indent] == " " * indent)
+            if mode in typed_set and I == 0:
                 arg_name = j.split(":")[0].strip()
                 if arg_name in types and types[arg_name]:
                     type_str = f" [{types[arg_name]}]"
                     j = j.replace(f"{arg_name}:", f"{arg_name}{type_str}:", 1)
-            Row += (cbl[cbi % len(cbl)] if isinstance(cbl,list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr,list) else cbr) + " │\n"
+            Row += (cbl[cbi % len(cbl)] if isinstance(cbl, list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr, list) else cbr) + " │\n"
             cbi += 1
         if Row:
             O.append(Row[:-1])
+
     if isinstance(cb, list):
         out.append(wrap(cb[0], "╭" + "─" * (width - 2) + "╮"))
     else:
         out.append(cb + "╭" + "─" * (width - 2) + "╮")
-    out.append((cbl[0] if isinstance(cbl,list) else cbl) + "│ " + cT + name + R + " " * (width - 4 - len(name))  + (cbr[0] if isinstance(cbr,list) else cbr) + " │")
-    out.append((cbl[1] if isinstance(cbl,list) else cbl) + "│ " + cc + sg   + R + " " * (width - 4 - len(sg))    + (cbr[1] if isinstance(cbr,list) else cbr) + " │")
-    out.append((cbl[2] if isinstance(cbl,list) else cbl) + "│ " +                 " " * (width - 4)              + (cbr[2] if isinstance(cbr,list) else cbr) + " │")
-    for i in O: out.append(i)
-    pal = "".join(c + "██\033[0m" for c in [cT,cs,cn,ct,CB,cc])
+    out.append((cbl[0] if isinstance(cbl, list) else cbl) + "│ " + cT + name + R + " " * (width - 4 - len(name)) + (cbr[0] if isinstance(cbr, list) else cbr) + " │")
+    out.append((cbl[1] if isinstance(cbl, list) else cbl) + "│ " + cc + sg + R + " " * (width - 4 - len(sg)) + (cbr[1] if isinstance(cbr, list) else cbr) + " │")
+    out.append((cbl[2] if isinstance(cbl, list) else cbl) + "│ " + " " * (width - 4) + (cbr[2] if isinstance(cbr, list) else cbr) + " │")
+    for i in O:
+        out.append(i)
+    pal = "".join(c + "██\033[0m" for c in [cT, cs, cn, ct, CB, cc])
     BL = "╰" + "─" * max(0, width - (2 * 6) - 9) + " [ "
     BR = " ] ─╯"
     if isinstance(cb, list):
@@ -1851,7 +1899,24 @@ def pretty_doc(
     out.append(R)
     return "\n".join(out)
 
-def _resolve_func_name(value):
+def _resolve_func_name(value: int|str|None) -> str | None:
+    """
+    resolves a function name. 
+
+    Args:
+        value:
+            name of func
+
+    Returns:
+        the new name
+
+    Example:
+        >>> _resolve_func_name("Ffff")
+
+    Notes:
+        is more of a helper func.
+        also name/value should be str.
+    """
     if value is None:
         return None
 
@@ -1870,7 +1935,55 @@ def _resolve_func_name(value):
 
     return name if callable(globals().get(name)) else None
 
-def _write_docstring_to_source(func, body_lines):
+def _build_docstring_body(
+    style: DocStyle,
+    answers: dict[str, list[str] | Union[list[str], list[tuple[str, list[str]]]]],
+) -> list[str]:
+    """
+    makes the docstring formatting for a given style.
+
+    Args:
+        style:
+            the style dictionary.
+        answers:
+            content that you want formatted.
+
+    Returns:
+        the new formatted body.
+
+    Example:
+        >>> # kinda complicated so no example for you.
+
+    Notes:
+        mainly used as a helper function
+    """
+    indent = " " * style["indent_size"]
+    indent2 = indent * 2
+    body = list(answers["desc"]) if answers["desc"] else ["*No description provided.*"]
+
+    for canonical in style["form_sections"]:
+        data = answers.get(canonical)
+        if not data:
+            continue
+        header = style["aliases"][canonical][0]  # writes back using the primary alias
+        body.append("")
+        body.append(f"{header}:")
+        kind = style["kind"][canonical]
+        if kind == "args":
+            for p, lines in data:
+                body.append(f"{indent}{p}:")
+                for line in (lines if lines else ["*No description provided.*"]):
+                    body.append(f"{indent2}{line}")
+        elif kind == "example":
+            first, rest = style["example_prefixes"][0], (style["example_prefixes"][1] if len(style["example_prefixes"]) > 1 else style["example_prefixes"][0])
+            for i, line in enumerate(data):
+                body.append(f"{indent}{first if i == 0 else rest}{line}")
+        else:
+            for line in data:
+                body.append(f"{indent}{line}")
+    return body
+
+def _write_docstring_to_source(func: Callable[..., Any],body_lines: list[str],) -> tuple[bool, str]:
     """
     writes a doc string into the file, so perma.
     
@@ -1942,72 +2055,160 @@ def _write_docstring_to_source(func, body_lines):
 
     return True, filepath
 
-def parse_doc(func):
+def parse_doc(func: Callable[..., Any], style: DocStyle = DOC_STYLE) -> ParsedDoc:
     """
-    gets doc data.
+    gets doc data, using `style` to know which words are section headers
 
     Args:
         func:
             the func you want to parse
-    
+        style:
+            a DOC_STYLE-shaped dict controlling header text, colors, indent
+            size, and example-line prefixes. Defaults to DOC_STYLE.
+
     Returns:
-        a dictionary with the lines for each section.
+        a dict: {"desc": [...], "<CanonicalSection>": [...] or {...}, ...}
 
     Example:
         >>> print(parse_doc(parse_doc))
-    
+
     Notes:
-        mainly used by doc_menu. 
+        mainly used by doc_cmd's .F form and pretty_doc.
     """
     doc = inspect.getdoc(func)
-    result = {"desc": [], "args": {}, "returns": [], "example": [], "notes": []}
+    alias_lookup, _, _ = style_doc_helper(style)
+    header_re = re.compile(style["header_pattern"], re.IGNORECASE)
+    underline_re = re.compile(style["underline_pattern"]) if style.get("underline_pattern") else None
+    indent = style["indent_size"]
+
+    result = {"desc": []}
+    for canonical in style["section_order"]:
+        result[canonical] = {} if style["kind"][canonical] == "args" else []
+
     if not doc:
         return result
 
-    headers_map = {"Args:": "args",       "Arguments:": "args",
-                   "Returns:": "returns", "Yields:": "returns",
-                   "Example:": "example", "Examples:": "example",
-                   "Notes:": "notes",
-                   "Raises:": "raises",}
-
-    LD = doc.expandtabs(4).split("\n")
+    LD = doc.expandtabs(indent).split("\n")
     mode = "desc"
     current_arg = None
-
-    for line in LD:
+    i = 0
+    while i < len(LD):
+        line = LD[i]
         stripped = line.strip()
-        if stripped in headers_map:
-            mode = headers_map[stripped]
+        canonical = None
+
+        if header_re.match(stripped):
+            canonical = alias_lookup.get(stripped.lower())
+        elif underline_re and stripped and i + 1 < len(LD) and underline_re.match(LD[i + 1].strip()):
+            canonical = alias_lookup.get(f"{stripped}:".lower())
+            if canonical:
+                i += 1  # consume the underline row too
+
+        if canonical:
+            mode = canonical
             current_arg = None
+            i += 1
             continue
 
         if mode == "desc":
             result["desc"].append(line)
-
-        elif mode == "args":
-            if line[:4] == "    " and line[4:5] not in ("", " "):
-                current_arg = stripped.rstrip(":")
-                result["args"][current_arg] = []
-            elif current_arg is not None:
-                result["args"][current_arg].append(line[8:] if line[:8] == " " * 8 else stripped)
-        
-        elif mode == "returns":
-            result["returns"].append(line[4:] if line[:4] == "    " else stripped)
-
-        elif mode == "example":
-            if stripped.startswith(">>> ") or stripped.startswith("... "):
-                result["example"].append(stripped[4:])
-
-        elif mode == "notes":
-            result["notes"].append(line[4:] if line[:4] == "    " else stripped)
+        else:
+            kind = style["kind"][mode]
+            if kind == "args":
+                if line[:indent] == " " * indent and line[indent:indent + 1] not in ("", " "):
+                    current_arg = stripped.rstrip(":")
+                    result[mode][current_arg] = []
+                elif current_arg is not None:
+                    result[mode][current_arg].append(
+                        line[indent * 2:] if line[:indent * 2] == " " * (indent * 2) else stripped
+                    )
+            elif kind == "example":
+                for prefix in style["example_prefixes"]:
+                    if stripped.startswith(prefix):
+                        result[mode].append(stripped[len(prefix):])
+                        break
+            else:
+                result[mode].append(line[indent:] if line[:indent] == " " * indent else stripped)
+        i += 1
 
     while result["desc"] and not result["desc"][-1].strip():
         result["desc"].pop()
     return result
 
+def get_dependencies(func: Callable[..., Any]) -> dict[str, list[str]]:
+    """
+    finds what dependcies a func has
+
+    Args:
+        func:
+            the function to analyze
+
+    Returns:
+        {"calls_local": [...], "calls_imported": [...], "calls_builtin": [...], "unresolved": [...]}
+
+    Example:
+        >>> print(get_dependencies(pretty_doc))
+
+    Notes:
+        Only sees what's syntactically visible in the source — dynamic
+        dispatch (getattr(obj, name)(), globals()[x]()) won't be caught.
+    """
+    result = {"calls_local": [], "calls_imported": [], "calls_builtin": [], "unresolved": []}
+
+    try:
+        src = inspect.getsource(func)
+    except (OSError, TypeError) as e:
+        result["unresolved"].append(f"<could not read source: {e}>")
+        return result
+
+    try:
+        tree = ast.parse(textwrap.dedent(src))
+    except (SyntaxError, IndentationError) as e:
+        result["unresolved"].append(f"<could not parse: {e}>")
+        return result
+
+    g = func.__globals__  # the actual module globals this func closes over
+    seen = set()
+
+    for node in ast.walk(tree):
+        name = None
+        if isinstance(node, ast.Call):
+            target = node.func
+            if isinstance(target, ast.Name):
+                name = target.id
+            elif isinstance(target, ast.Attribute):
+                # walk to the root of a chain like re.compile(...) -> "re"
+                root = target
+                while isinstance(root, ast.Attribute):
+                    root = root.value
+                if isinstance(root, ast.Name):
+                    name = root.id
+
+        if not name or name in seen or name == func.__name__:
+            continue
+        seen.add(name)
+
+        if name in g:
+            obj = g[name]
+            if inspect.isfunction(obj) and getattr(obj, "__module__", "") == func.__module__:
+                result["calls_local"].append(name)
+            elif inspect.ismodule(obj):
+                result["calls_imported"].append(name)
+            elif callable(obj):
+                mod = getattr(obj, "__module__", "")
+                (result["calls_imported"] if mod and mod != "builtins" else result["calls_builtin"]).append(name)
+        elif hasattr(builtins, name):
+            result["calls_builtin"].append(name)
+        else:
+            result["unresolved"].append(name)
+
+    for k in result:
+        result[k].sort()
+    return result
+
 functions = None
 idf = {}
-def getFuncs():
+def getFuncs() -> tuple[list[str], dict[int, str]]:
     functions = []        
     current_module = globals().get("__name__", "__main__")                
     for name, obj in globals().items():
@@ -2226,6 +2427,8 @@ def doc_cmd(
                 (".C [id] [str2] / .color [id] [str2]",   "sets id (0...5), to be the color str (rgb sep by space, or hex)"),
                 (".t [list] / .theme [list]",             ".color but for each one in one go. (list, is sep by space of hex only)"),
                 (".rgb int int int [cf/cb/c/ ]",          "prints rgb color in ANSI, and copies fg for cf, bg for cb (doesn't copy color to clipboard by default.)"),
+                (".D / .deps",                            "shows dependencies of a function."),
+                (".F / .form",                            "auto creates a docstring for a func after filling out a short form."),
                 (".q / .quit / ctrl+c",                   "quits the program"),
                 (".h / .help / .?",                       "prints this help menu."),]
             R = "\033[0m"
@@ -2247,54 +2450,60 @@ def doc_cmd(
             if history == []: current_view = ".m"
             else: current_view = history[-1]
             continue
-        elif current_view.startswith((".run", ".example",".r",".copy",".c")):
+        elif current_view.startswith((".run", ".example", ".r", ".copy", ".c")):
             cvl = current_view.split(" ")
-            if not history or (history[-1].startswith('.') and not history[-1].startswith((".my",".mx")) and not len(cvl) == 2):
+            if not history or (history[-1].startswith('.') and not history[-1].startswith((".my", ".mx")) and not len(cvl) == 2):
                 print(f"{rgb(255, 100, 100)}[!] Error: .run no work on cmd's.\033[0m")
             else:
-                if len(cvl) == 1 and not history[-1].startswith((".my",".mx")): func_name = [history[-1]]
+                if len(cvl) == 1 and not history[-1].startswith((".my", ".mx")): func_name = [history[-1]]
                 elif len(cvl) == 2 and cvl[1] in [str(i) for i in range(10)]: func_name = [idf[int(cvl[1])]]
                 elif len(cvl) == 2: func_name = [cvl[1]]
-                elif history[-1].startswith((".my",".mx")): func_name = list(history[-1].split(" ")[1:])
+                elif history[-1].startswith((".my", ".mx")): func_name = list(history[-1].split(" ")[1:])
                 else: func_name = list(idf[int(i)] if i[1] in [str(i) for i in range(10)] else i for i in cvl[1:])
                 func_obj = list(globals().get(i) for i in func_name)
                 docs = list(inspect.getdoc(i) if i else "" for i in func_obj)
+
+                style = DOC_STYLE  # swap for a custom style dict to match a different docstring format
+                _, style_headers, _ = _style_headers_and_colors(style)
+                header_re = re.compile(style["header_pattern"], re.IGNORECASE)
+                indent = " " * style["indent_size"]
+                example_aliases = {f"{a}:" for a in style["aliases"]["Example"]}
+
                 for idx, doc in enumerate(docs):
                     if not doc:
                         print(f"{rgb(255, 100, 100)} no docstring found for '{func_name[idx]}'.\033[0m")
                     else:
-                        lines = doc.expandtabs(4).splitlines()
+                        lines = doc.expandtabs(len(indent)).splitlines()
                         example_lines = []
                         capturing = False
                         for line in lines:
                             stripped = line.strip()
-                            if stripped.startswith("Example") or stripped.startswith("Examples"):
+                            if stripped in example_aliases:
                                 capturing = True
                                 continue
-                            elif capturing and stripped and not line.startswith("    "):
-                                if stripped.endswith(":") or stripped in ["Notes:", "Args:", "Returns:"]:
+                            elif capturing and stripped and not line.startswith(indent):
+                                if header_re.match(stripped) or stripped in style_headers:
                                     capturing = False
-                            
+
                             if capturing:
-                                stripped_line = line.strip()
-                                if stripped_line.startswith(">>> "):
-                                    example_lines.append(stripped_line[4:])
-                                elif stripped_line.startswith("... "):
-                                    example_lines.append(stripped_line[4:])
-                        
+                                for prefix in style["example_prefixes"]:
+                                    if stripped.startswith(prefix):
+                                        example_lines.append(stripped[len(prefix):])
+                                        break
+
                         if not example_lines:
                             print(f"{rgb(255, 100, 100)} no valid examples found in '{func_name[idx]}' docstring.\033[0m")
                         else:
                             code = "\n".join(example_lines)
-                            if current_view in [".run", ".example",".r"]:
+                            if current_view in [".run", ".example", ".r"]:
                                 print(f"\033[0m{rgb(100, 255, 150)}[*] Running: [for: {func_name[idx]}]\033[0m\n")
                                 try:
-                                    tree = ast.parse(code)                            
+                                    tree = ast.parse(code)
                                     if tree.body and isinstance(tree.body[-1], ast.Expr):
-                                        last_expr = tree.body.pop()                                
+                                        last_expr = tree.body.pop()
                                         if tree.body:
-                                            exec(compile(tree, filename="<ast>", mode="exec"), globals())                                
-                                        result = eval(compile(ast.Expression(last_expr.value), filename="<ast>", mode="eval"), globals())                                
+                                            exec(compile(tree, filename="<ast>", mode="exec"), globals())
+                                        result = eval(compile(ast.Expression(last_expr.value), filename="<ast>", mode="eval"), globals())
                                         if result is not None:
                                             print(f"\n{rgb(100, 255, 255)}[Return Value]:\033[0m {repr(result)}")
                                     else:
@@ -2438,6 +2647,7 @@ def doc_cmd(
             if not callable(func_obj):
                 print(f"{rgb(255, 100, 100)} no valid func found to build a doc for.\033[0m\n")
             else:
+                style = DOC_STYLE  # swap for a custom style dict to change section names/format
                 try:
                     sig = inspect.signature(func_obj)
                     params = {
@@ -2479,70 +2689,43 @@ def doc_cmd(
                         return ask(prompt, multiline=True)
                     return ask(prompt, multiline=True)
 
-                existing = parse_doc(func_obj)
+                existing = parse_doc(func_obj, style)
+                answers = {}
 
                 print(f"\n{cT}Building docstring for: {cn}{func_name}{R}\n")
+                answers["desc"] = ask_or_keep(f"Description of '{func_name}':", existing["desc"])
 
-                desc_lines = ask_or_keep(f"Description of '{func_name}':", existing["desc"])
+                for canonical in style["form_sections"]:
+                    kind = style["kind"][canonical]
+                    label = style["aliases"][canonical][0]
+                    if kind == "args":
+                        arg_blocks = []
+                        if params:
+                            print(f"\n{cs}-- {label} --{R}")
+                            for p, ptype in params.items():
+                                t = fmt_type(ptype)
+                                arg_label = f"{p}{TY} [{t}]{R}" if t else p
+                                lines = ask_or_keep(f"{arg_label} - description:", existing[canonical].get(p))
+                                arg_blocks.append((p, lines))
+                        answers[canonical] = arg_blocks
+                    else:
+                        answers[canonical] = ask_or_keep(f"{label} (optional):", existing.get(canonical))
 
-                arg_blocks = []
-                if params:
-                    print(f"\n{cs}-- Args --{R}")
-                    for p, ptype in params.items():
-                        t = fmt_type(ptype)
-                        label = f"{p}{TY} [{t}]{R}" if t else p
-                        lines = ask_or_keep(f"{label} - description:", existing["args"].get(p))
-                        arg_blocks.append((p, lines))
-
-                ret_lines = ask_or_keep("Returns (optional):", existing["returns"])
-                example_lines = ask_or_keep("Example code, one line per input (optional):", existing["example"])
-                notes_lines = ask_or_keep("Notes (optional):", existing["notes"])
-
-                body = []
-                body.extend(desc_lines if desc_lines else ["*No description provided.*"])
-
-                if arg_blocks:
-                    body.append("")
-                    body.append("Args:")
-                    for p, lines in arg_blocks:
-                        body.append(f"    {p}:")
-                        for line in (lines if lines else ["*No description provided.*"]):
-                            body.append(f"        {line}")
-
-                if ret_lines:
-                    body.append("")
-                    body.append("Returns:")
-                    for line in ret_lines:
-                        body.append(f"    {line}")
-
-                if example_lines:
-                    body.append("")
-                    body.append("Example:")
-                    for i, line in enumerate(example_lines):
-                        body.append(f"    {'>>> ' if i == 0 else '... '}{line}")
-
-                if notes_lines:
-                    body.append("")
-                    body.append("Notes:")
-                    for line in notes_lines:
-                        body.append(f"    {line}")
-
+                body = _build_docstring_body(style, answers)
                 func_obj.__doc__ = "\n".join(body)
 
                 src = '    """\n' + "\n".join(("    " + l if l else "") for l in body) + '\n    """'
                 copy(src)
 
-                print(f"\n{rgb(100, 255, 150)}[*] docstring built for '{func_name}',  "
-                      f" copied to clipboard.\033[0m\n")
-                print(pretty_doc(func_obj, width, cT, cs, cn, ct, cb, cc, chrome=chrome))
+                print(f"\n{rgb(100, 255, 150)}[*] docstring built for '{func_name}', "
+                      f"copied to clipboard.\033[0m\n")
+                print(pretty_doc(func_obj, width, cT, cs, cn, ct, cb, cc, style=style, chrome=chrome))
 
-                save = input(f"\n{HL}Save this to the source file permanently? "
-                              f"[y/N]: {R}").strip().lower()
+                save = input(f"\n{HL}Save this to the source file permanently? [y/N]: {R}").strip().lower()
                 if save in ("y", "yes"):
                     ok, msg = _write_docstring_to_source(func_obj, body)
                     if ok:
-                        print(f"{rgb(100, 255, 150)}[*] written to {msg} "
-                              f"(backup at {msg}.bak)\033[0m\n")
+                        print(f"{rgb(100, 255, 150)}[*] written to {msg} (backup at {msg}.bak)\033[0m\n")
                     else:
                         print(f"{rgb(255, 100, 100)}[!] not written: {msg}\033[0m\n")
                 else:
@@ -2550,9 +2733,34 @@ def doc_cmd(
 
                 if not history or history[-1] != func_name:
                     history.append(func_name)
+        elif current_view.startswith((".D", ".deps")):
+            cvl = current_view.split(" ")
+            if len(cvl) > 1:
+                func_name = _resolve_func_name(" ".join(cvl[1:]))
+            elif history and not history[-1].startswith("."):
+                func_name = history[-1]
+            else:
+                func_name = None
 
-                if not history or history[-1] != func_name:
-                    history.append(func_name)
+            func_obj = globals().get(func_name) if func_name else None
+            if not callable(func_obj):
+                print(f"{rgb(255, 100, 100)} no valid func found.\033[0m\n")
+            else:
+                deps = get_dependencies(func_obj)
+                print(f"\n{cT}Dependencies for: {cn}{func_name}{R}\n")
+                labels = {
+                    "calls_local": ("Local functions", cn),
+                    "calls_imported": ("Imported / module calls", cc),
+                    "calls_builtin": ("Builtins", ct),
+                    "unresolved": ("Unresolved (dynamic/unknown)", rgb(255, 100, 100)),
+                }
+                for key, (label, color) in labels.items():
+                    if deps[key]:
+                        print(f"{cs}-- {label} --{R}")
+                        print(color + ", ".join(deps[key]) + R + "\n")
+                if not any(deps.values()):
+                    print(f"{ct}no dependencies found.{R}\n")
+                history.append(func_name)
         elif current_view in [".q",".quit"]:
             break
         else:
