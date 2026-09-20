@@ -3,7 +3,7 @@ a python module focused on creating better gui within the terminal
 is cross terminal! 
 
 Features
---------
+---
 - rgb colors
 - 256 bit colors
 - Cursor movement
@@ -46,17 +46,22 @@ built for stardance
 #### 4
 ##### 5
 ###### 6
+####### 7
 
 **bold**
 *itaclic*
 ~~cross~~
 ***both***
 <!-- Unordered List -->
+\\033[44m
+\\9555
+\\3333
 - Item 1
 * Item 2
 + Item 3
 
-<!-- Ordered List -->
+<!-- Ordered List
+ggg--> 
 1. First item
 2. Second item
 
