@@ -105,8 +105,9 @@ remove = {
     "hidden"        : "\033[28m",
     "strikethrough" : "\033[29m"}
 
+text = rgb(200,200,200) + color(m="b")
 STYLEa = {"CLEAR" :["\033[0m"],
-         "#":[color("red"),color("yellow"),color("green"),color("cyan"),color("blue"),color("magenta"),color()],
+         "#":[color("red"),color("yellow"),color("green"),color("cyan"),color("blue"),color("magenta"),text],
          "*":[add["italic"],add["bold"],add["bold"] + add["italic"],None],
          "_":[add["italic"],add["bold"],add["bold"] + add["italic"],None],
          "~":[None,add["strikethrough"],None],
@@ -118,7 +119,7 @@ STYLEr = {"CLEAR" :["\033[0m"],
          "_":[remove["italic"],remove["bold"],remove["bold"] + remove["italic"],None],
          "~":[None,remove["strikethrough"],None],
          "=":[None,color("default","b"),None],
-         "`":[color()+color(m="b"),None,"```",None]}
+         "`":[text,None,"```",None]}
 STYLER = {"<!--":add["hidden"],
           "-->": remove["hidden"],
           "* ":"• ",
@@ -138,7 +139,7 @@ out = []
 I = False
 with open("README.md", "r") as file:
     for line in file:
-        row = ""
+        row = text
         line = line.rstrip("\n")
         TT = False
         if line.lstrip().startswith(tuple(k for k in STYLEm.keys())):
@@ -204,6 +205,6 @@ with open("README.md", "r") as file:
                 row += char             
         row += STYLEa["CLEAR"][0]
         out.append(row)
-        
+    
 print("\n".join(out))
 
