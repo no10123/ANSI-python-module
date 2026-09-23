@@ -1,6 +1,25 @@
 import os
 import re
 
+def HEXtoRGB(hex:str) -> tuple[int,int,int]:
+    """
+        converts to hex to rgb.
+    
+        Args:
+            hex:
+                Hex code for the color.
+        Returns:
+            A rgb tuple
+    
+        Example:
+            >>> HEXtoRGB("#ffffff")
+    
+        Notes:
+            nothing to note
+    """
+    return tuple(int(hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+
+
 class ThemeEngine:
     def __init__(self, theme_folder="themes"):
         self.theme_folder = theme_folder
@@ -25,7 +44,7 @@ class ThemeEngine:
             return []
         return [f.replace('.theme', '') for f in os.listdir(self.theme_folder) if f.endswith('.theme')]
 
-    def load_theme(self, theme_name, tbg=False):
+    def load_theme(self, theme_name, tbg=False,RGB=False):
         """creates a dict w/ colors in .theme"""
         self.tbg = tbg
         file_path = os.path.join(self.theme_folder, f"{theme_name}.theme")
@@ -47,7 +66,10 @@ class ThemeEngine:
                     key = match.group(1)
                     hex_val = match.group(2)
                     is_bg = key.endswith('_bg')
-                    self.colors[key] = self.hex_to_ansi(hex_val, is_background=is_bg)
+                    if RGB:
+                        self.colors[key] = HEXtoRGB(hex_val)
+                    else:
+                        self.colors[key] = self.hex_to_ansi(hex_val, is_background=is_bg)
         
         if not tbg:
             self.RESET = self.get("main_bg" + "main_fg")
@@ -88,3 +110,83 @@ class ThemeEngine:
             return []
 
         return [f[:-6] for f in os.listdir("themes") if f.endswith(".theme")]
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+def strip_ansi(s):
+    return ANSI.sub("", s)
+
+def themeDemo(t="nord"):
+    """ANSI theme preview table (proper alignment)"""
+    theme = ThemeEngine()
+    theme.load_theme(t,tbg=True)
+    p = theme.newP()
+
+    items = [
+        [["main_bg", "main_fg", "title", "hi_fg"],
+        ["selected_bg", "selected_fg", "inactive_fg"],
+        ["proc_misc"],
+        ["cpu_box", "mem_box", "net_box", "proc_box"],
+        ["div_line"]],
+
+        [["temp_start", "temp_mid", "temp_end"],
+        ["cpu_start", "cpu_mid", "cpu_end"]],
+
+        [["free_start", "free_mid", "free_end"],
+        ["cached_start", "cached_mid", "cached_end"],
+        ["available_start", "available_mid", "available_end"],
+        ["used_start", "used_mid", "used_end"]],
+
+        [["download_start", "download_mid", "download_end"],
+        ["upload_start", "upload_mid", "upload_end"]],
+    ]
+
+    reset = p.get("r", "\033[0m")
+    col_width = 16
+
+    print("\n--- theme preveiw ---\n")
+
+    for block in items:
+        max_rows = max(len(row) for row in block)
+
+        for i in range(max_rows):
+            row_out = ""
+
+            for row in block:
+                if i < len(row):
+                    k = row[i]
+                    val = p.get(k, "")
+                    cell = f"{val}{k}{reset}"
+
+                    visible_len = len(strip_ansi(cell))
+                    padding = col_width - visible_len
+
+                    row_out += cell + (" " * max(padding, 1)) + "| "
+                else:
+                    row_out += (" " * col_width) + "| "
+
+            print(row_out)
+
+        print("-" * (col_width * len(block)))
+
+    print("\n--- color blocks ---\n")
+
+    groups = [
+        ("UI", ["main_bg", "main_fg", "title", "hi_fg"]),
+        ("Boxes", ["cpu_box", "mem_box", "net_box", "proc_box", "div_line"]),
+        ("Selection", ["selected_bg", "selected_fg", "inactive_fg"]),
+        ("Graphs CPU", ["cpu_start", "cpu_mid", "cpu_end"]),
+        ("Graphs MEM", ["used_start", "used_mid", "used_end"]),
+        ("Network", ["download_start", "download_mid", "download_end"]),
+    ]
+
+    for name, keys in groups:
+        line = f"{name:<12} | "
+        for k in keys:
+            if k in p:
+                line += f"{p[k]}█{reset}"
+            else:
+                line += " "
+        print(line)
+
+    print()
