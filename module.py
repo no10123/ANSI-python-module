@@ -48,6 +48,7 @@ from typing import TypedDict, Literal, Union, Callable, Any
 import ast
 import subprocess
 import difflib
+import terminal
 
 class RawTerminal():
     """

@@ -286,14 +286,15 @@ def mdGlow(filename:str="README.md"):
         
     print("\n".join(out))
 
-if usingThemes:
-    for i in TL:
-        try:
-            text, STYLEa, STYLEr, STYLER, STYLEm, mlb = setTheme(i)
-            mdGlow("example.md")
-            print(f"theme: {i}")
-            i = input("next theme: ")
-            if i  in ["q","quit"]: break
-        except: pass
-else:
-    mdGlow("example.md")
+if __name__ == "__main__":
+    if usingThemes:
+        for i in TL:
+            try:
+                text, STYLEa, STYLEr, STYLER, STYLEm, mlb = setTheme(i)
+                mdGlow("example.md")
+                print(f"theme: {i}")
+                i = input("next theme: ")
+                if i  in ["q","quit"]: break
+            except: pass
+    else:
+        mdGlow("example.md")
