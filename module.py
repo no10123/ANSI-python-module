@@ -11,6 +11,8 @@ import pyperclip
 import serial.tools.list_ports
 import shutil
 import ctypes
+if os.name == 'nt':
+    from ctypes import wintypes
 import colorsys
 from DataFetcher import *
 from themeParser import *
@@ -49,6 +51,7 @@ import ast
 import subprocess
 import difflib
 import terminal
+import builtins
 
 class RawTerminal():
     """
@@ -1189,9 +1192,17 @@ def iprint(msgs:list, end:str="\n", lend:str=""):
     for i in msgs:
         print(i,end=(end if i == msgs[-1] else lend))
 
-pygame.init()
-pygame.mixer.init()
+if pygame is not None:
+    try:
+        pygame.init()
+        pygame.mixer.init()
+    except Exception:
+        pygame = None
+
 def playFile(path:str):
+    if pygame is None:
+        print(f"{rgb(255, 100, 100)}Audio playback is unavailable in this environment.{chr(27)}[0m")
+        return
     if not pygame.mixer.get_init():
         pygame.mixer.init()
     pygame.mixer.music.load(path)
@@ -1723,6 +1734,24 @@ DOC_STYLE = {
 }
 
 _UNSET = object()
+
+def nested_dict_dir(path):
+    tree = {}
+    try:
+        items = sorted(os.listdir(path))
+    except (PermissionError, OSError):
+        return []
+    files_list = []
+    for item in items:
+        full_path = os.path.join(path, item)
+        if os.path.isdir(full_path):
+            tree[item] = nested_dict_dir(full_path)
+        else:
+            files_list.append(item)
+    if files_list:
+        tree["__files__"] = files_list
+
+    return tree
 
 def style_doc_helper(style:DocStyle) -> tuple[dict[str, str], list[str], dict[str, list[str]]]:
     """
@@ -2361,6 +2390,105 @@ def main_menu(
 
 
 history = []
+
+def path_resolve(base_path: str, arg: str | None) -> str:
+    if not arg:
+        return base_path
+    expanded = os.path.expanduser(arg)
+    if os.path.isabs(expanded):
+        return expanded
+    return os.path.abspath(os.path.join(base_path, expanded))
+
+def path_list(path: str):
+    try:
+        entries = sorted(os.listdir(path))
+    except OSError as exc:
+        print(f"{rgb(255, 100, 100)}Cannot list directory: {exc}\033[0m")
+        return
+
+    for entry in entries:
+        full_path = os.path.join(path, entry)
+        if os.path.isdir(full_path):
+            print(f"{rgb(120, 220, 255)}{entry}\033[0m/")
+        else:
+            print(f"{rgb(230, 230, 230)}{entry}\033[0m")
+
+def supports_kitty_graphics() -> bool:
+    term = (os.environ.get("TERM") or "").lower()
+    if "kitty" in term:
+        return True
+    if os.name != "nt":
+        return False
+    return False
+
+
+def ascii_image_preview(path: str, width: int = 80) -> str:
+    from PIL import Image
+
+    img = Image.open(path).convert("L")
+    if img.width <= 0 or img.height <= 0:
+        return ""
+
+    max_width = max(20, min(width, img.width))
+    scale = max_width / img.width
+    new_height = max(1, int(img.height * scale * 0.45))
+    img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
+
+    chars = " .:-=+*#%@"
+    lines = []
+    for y in range(img.height):
+        row = []
+        for x in range(img.width):
+            lum = img.getpixel((x, y))
+            idx = max(0, min(len(chars) - 1, lum * (len(chars) - 1) // 255))
+            row.append(chars[idx])
+        lines.append("".join(row))
+    return "\n".join(lines) + "\n"
+
+
+def render_image_preview(path: str):
+    from PIL import Image
+
+    image = Image.open(path).convert("RGBA")
+    if not supports_kitty_graphics():
+        return ascii_image_preview(path)
+
+    try:
+        from displays import k_img as display_k_img
+        return display_k_img(image, 1, 1)
+    except Exception:
+        return ascii_image_preview(path)
+
+
+def view_file(path: str):
+    if not os.path.exists(path):
+        print(f"{rgb(255, 100, 100)}File not found: {path}\033[0m")
+        return
+    if os.path.isdir(path):
+        path_list(path)
+        return
+    lower_name = os.path.basename(path).lower()
+    if lower_name.endswith((".png", ".jpg", ".jpeg", ".jfif", ".gif", ".bmp", ".webp")):
+        try:
+            rendered = render_image_preview(path)
+            sys.stdout.write(rendered)
+            sys.stdout.flush()
+        except Exception as exc:
+            print(f"{rgb(255, 100, 100)}Image preview failed: {exc}\033[0m")
+        return
+    if lower_name.endswith(".md") or "readme" in lower_name:
+        try:
+            print("\n".join(terminal.mdGlow(path)))
+        except Exception as exc:
+            print(f"{rgb(255, 100, 100)}Markdown preview failed: {exc}\033[0m")
+        return
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as file:
+            print(file.read())
+    except Exception as exc:
+        print(f"{rgb(255, 100, 100)}Could not read file: {exc}\033[0m")
+
+
 def doc_cmd(
         width: int = W,                    # colors:
         cT: str      = rgb(0, 255, 255),   # Title
@@ -2372,23 +2500,32 @@ def doc_cmd(
         chrome: bool = True, #makes border color cool.
     ):
     current_view = ".menu"
+    cwd = os.getcwd()
     MMD = False
     favorites = []
     while True:
-        clear()        
+        rv= current_view.strip()
+        parts = rv.split() if rv else []
+        flags = []
+        while parts and parts[-1].startswith("--"):
+            flags.insert(0, parts.pop())
+        current_view = " ".join(parts) if parts else ".menu"
+        flag_names = {flag.lstrip("-").lower() for flag in flags}
+        if "a" not in flag_names:
+            clear()
         b_col = rgb(100, 100, 100)
         txt_col = rgb(220, 220, 220)
-        print(f"{b_col}╭{'─' * (width - 2)}╮\033[0m")
-        msgs = [
-            "  Type a function name to see the help card for that func.",
-            "  Type '.menu' to see all functions, '.back' to go to the previous func",
-            " or '.quit' to exit."
-        ]
-        for m in msgs:
-            pad = (width - 2) - len(m)
-            print(f"{b_col}│{txt_col}{m}{' ' * pad}{b_col}│\033[0m")
-        print(f"{b_col}╰{'─' * (width - 2)}╯\033[0m\n")
-        BACK = False
+        if "h" not in flag_names and "a" not in flag_names:
+            print(f"{b_col}╭{'─' * (width - 2)}╮\033[0m")
+            msgs = [
+                "  Type a function name to see the help card for that func.",
+                "  Type '.menu' to see all functions, '.back' to go to the previous func",
+                " or '.quit' to exit."
+            ]
+            for m in msgs:
+                pad = (width - 2) - len(m)
+                print(f"{b_col}│{txt_col}{m}{' ' * pad}{b_col}│\033[0m")
+            print(f"{b_col}╰{'─' * (width - 2)}╯\033[0m\n")
         if current_view in [".back", ".b"]:
             if history: history.pop()
             current_view = history.pop() if history else ".menu"
@@ -2410,11 +2547,41 @@ def doc_cmd(
             else:
                 print(f"No func found for id: {current_view}")
                 current_view = ".menu"
+        elif current_view.startswith((".path", ".pwd")):
+            print(cwd)
+        elif current_view.startswith(".cd"):
+            cvl = current_view.split()
+            if len(cvl) == 1:
+                print(cwd)
+            else:
+                target = path_resolve(cwd, " ".join(cvl[1:]))
+                if os.path.isdir(target):
+                    cwd = target
+                else:
+                    print(f"{rgb(255, 100, 100)}Directory not found: {target}\033[0m")
+        elif current_view.startswith((".ls", ".dir")):
+            cvl = current_view.split()
+            target = cwd if len(cvl) == 1 else path_resolve(cwd, " ".join(cvl[1:]))
+            if os.path.isdir(target):
+                path_list(target)
+            else:
+                print(f"{rgb(255, 100, 100)}Not a directory: {target}\033[0m")
+        elif current_view.startswith((".view", ".open")):
+            cvl = current_view.split()
+            if len(cvl) == 1:
+                print(f"{rgb(255, 100, 100)}Usage: .view <file>\033[0m")
+            else:
+                target = path_resolve(cwd, " ".join(cvl[1:]))
+                view_file(target)
         elif current_view in [".h",".help",".?"]:
-            # todo: fav, sort, sr, mx
+            # todo: sort, sr
             COMMANDS = [
                 (".b / .back",                            "goes back to previous func"),
                 (".m / .menu",                            "goes to main menu with all function names."),
+                (".path / .pwd",                          "prints the directory path."),
+                (".cd [path]",                            "changes the current directory."),
+                (".ls [path]",                            "lists the current or given directory."),
+                (".view [file]",                          "prints the text, or img, or md stylized."),
                 (".run / .r / .example",                  "runs the example code in a docstring if one exists, and gives the return value."),
                 (".c / .copy",                            "copies the example code to clipboard"),
                 ("id / function name",                    "prints a stylized doc card for that function."),
@@ -2431,7 +2598,12 @@ def doc_cmd(
                 (".D / .deps",                            "shows dependencies of a function."),
                 (".F / .form",                            "auto creates a docstring for a func after filling out a short form."),
                 (".q / .quit / ctrl+c",                   "quits the program"),
-                (".h / .help / .?",                       "prints this help menu."),]
+                (".h / .help / .?",                       "prints this help menu."),
+                (".debug / .d",                           "toggles debug mode, which prints the current view and history."),
+                (".chrome",                               "toggles chrome border."),
+                ("--a",                                   "a flag that stops the screen for clearing."),
+                ("--h",                                   "a flag that tells it to not print the help bar."),
+                ("--A",                                   "a flag that tells it to not print the help bar, and not clear the screen."),]
             R = "\033[0m"
             inner = width - 4
             def row(text, color):
@@ -2451,6 +2623,16 @@ def doc_cmd(
             if history == []: current_view = ".m"
             else: current_view = history[-1]
             continue
+        elif current_view.startswith(".chrome"):
+            cvl = current_view.split(" ")
+            if len(cvl) > 1:
+                if cvl[1].lower() in ["t","true"]: chrome = True
+                elif cvl[1].lower() in ["f","false"]: chrome = False
+                else: chrome = not chrome
+            else: chrome = not chrome
+            if history and history[-1]: current_view = history[-1]
+            else: current_view = ".menu"
+            continue
         elif current_view.startswith((".run", ".example", ".r", ".copy", ".c")):
             cvl = current_view.split(" ")
             if not history or (history[-1].startswith('.') and not history[-1].startswith((".my", ".mx")) and not len(cvl) == 2):
@@ -2464,8 +2646,8 @@ def doc_cmd(
                 func_obj = list(globals().get(i) for i in func_name)
                 docs = list(inspect.getdoc(i) if i else "" for i in func_obj)
 
-                style = DOC_STYLE  # swap for a custom style dict to match a different docstring format
-                _, style_headers, _ = _style_headers_and_colors(style)
+                style = DOC_STYLE
+                _, style_headers, _ = style_headers(style)
                 header_re = re.compile(style["header_pattern"], re.IGNORECASE)
                 indent = " " * style["indent_size"]
                 example_aliases = {f"{a}:" for a in style["aliases"]["Example"]}
@@ -2735,33 +2917,43 @@ def doc_cmd(
                 if not history or history[-1] != func_name:
                     history.append(func_name)
         elif current_view.startswith((".D", ".deps")):
+            R = "\033[0m"
             cvl = current_view.split(" ")
+            func_name = []
             if len(cvl) > 1:
-                func_name = _resolve_func_name(" ".join(cvl[1:]))
-            elif history and not history[-1].startswith("."):
-                func_name = history[-1]
+                for i in cvl[1:]:
+                    resolved = _resolve_func_name(i)
+                    if resolved:
+                        func_name.append(resolved)
+            elif history and isinstance(history[-1], str) and not history[-1].startswith("."):
+                func_name = [history[-1]]
             else:
-                func_name = None
+                func_name = [None]
 
-            func_obj = globals().get(func_name) if func_name else None
-            if not callable(func_obj):
+            if not func_name or func_name == [None]:
                 print(f"{rgb(255, 100, 100)} no valid func found.\033[0m\n")
-            else:
-                deps = get_dependencies(func_obj)
-                print(f"\n{cT}Dependencies for: {cn}{func_name}{R}\n")
-                labels = {
-                    "calls_local": ("Local functions", cn),
-                    "calls_imported": ("Imported / module calls", cc),
-                    "calls_builtin": ("Builtins", ct),
-                    "unresolved": ("Unresolved (dynamic/unknown)", rgb(255, 100, 100)),
-                }
-                for key, (label, color) in labels.items():
-                    if deps[key]:
-                        print(f"{cs}-- {label} --{R}")
-                        print(color + ", ".join(deps[key]) + R + "\n")
-                if not any(deps.values()):
-                    print(f"{ct}no dependencies found.{R}\n")
-                history.append(func_name)
+                continue
+
+            func_l = [globals().get(f) if f else None for f in func_name]
+            for idx, func_obj in enumerate(func_l):
+                if not callable(func_obj):
+                    print(f"{rgb(255, 100, 100)} no valid func found.\033[0m\n")
+                else:
+                    deps = get_dependencies(func_obj)
+                    print(f"\n{cT}Dependencies for: {cn}{func_name[idx]}{R}\n")
+                    labels = {
+                        "calls_local": ("Local functions", cn),
+                        "calls_imported": ("Imported / module calls", cc),
+                        "calls_builtin": ("Builtins", ct),
+                        "unresolved": ("Unresolved (dynamic/unknown)", rgb(255, 100, 100)),
+                    }
+                    for key, (label, color) in labels.items():
+                        if deps[key]:
+                            print(f"{cs}-- {label} --{R}")
+                            print(color + ", ".join(deps[key]) + R + "\n")
+                    if not any(deps.values()):
+                        print(f"{ct}no dependencies found.{R}\n")
+                    history.append(func_name[0] if len(func_name) == 1 else " ".join(func_name))
         elif current_view in [".q",".quit"]:
             break
         else:
@@ -2774,8 +2966,9 @@ def doc_cmd(
         
         if MMD:
             print(f"[DEBUG]: {current_view=},{history=},{len(history)=},{len(idf)=}")
-        user_input = input("\n\033[0m>>> ").strip()
-        
+        user_input = input("\n\033[0m>>> ")
+        user_input = (user_input or "").replace("\ufeff", "").replace("ï", "").replace("»", "").replace("¿", "").strip()
+
         if user_input.lower() in [".quit", ".exit", ".q"]:
             break
         elif user_input:
@@ -4232,8 +4425,15 @@ def cavaDemo():
         cava_graph(H,1,H)
         time.sleep(0.05)
 
-import flipper
+try:
+    import flipper
+except ModuleNotFoundError:
+    flipper = None
+
 def main():
+    if flipper is None:
+        print("Flipper support is unavailable in this environment.")
+        return
     flipper.start()
     if flipper.port:
         flipper.cli(flipper.port)
@@ -4484,5 +4684,7 @@ if __name__ == "__main__":
     #sixtelDemo()
     #themeselect()
     #main()
+    #slideshowDemo()
     doc_cmd()
+    #cavaDemo()
     input()

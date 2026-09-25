@@ -283,18 +283,17 @@ def mdGlow(filename:str="README.md"):
                     row += char             
             row += STYLEa["CLEAR"][0]
             out.append(row)
-        
-    print("\n".join(out))
+    return out
 
 if __name__ == "__main__":
     if usingThemes:
         for i in TL:
             try:
                 text, STYLEa, STYLEr, STYLER, STYLEm, mlb = setTheme(i)
-                mdGlow("example.md")
+                print("\n".join(mdGlow("example.md")))
                 print(f"theme: {i}")
                 i = input("next theme: ")
                 if i  in ["q","quit"]: break
             except: pass
     else:
-        mdGlow("example.md")
+        print("\n".join(mdGlow("example.md")))
