@@ -11,8 +11,7 @@ import pyperclip
 import serial.tools.list_ports
 import shutil
 import ctypes
-if os.name == 'nt':
-    from ctypes import wintypes
+if os.name == 'nt': from ctypes import wintypes
 import colorsys
 from DataFetcher import *
 from themeParser import *
@@ -40,10 +39,8 @@ from ctypes import wintypes, windll
 from displays import *
 import colorsys
 from math import cos, sin
-if os.name == 'nt':
-    import msvcrt
-else:
-    import select
+if os.name == 'nt': import msvcrt
+else: import select
 import inspect
 import textwrap
 from typing import TypedDict, Literal, Union, Callable, Any
@@ -52,8 +49,11 @@ import subprocess
 import difflib
 import terminal
 import builtins
+import ast
+import shlex
 
 class RawTerminal():
+    
     """
     a class that sets the state of the terminal to allow for cursor inputs.
 
@@ -1846,11 +1846,14 @@ def pretty_doc(
         types = {p: (param.annotation if param.annotation != inspect.Parameter.empty else None) for p, param in sig.parameters.items()}
     except (ValueError, TypeError):
         types = {}
+    warp_width = width - 4
     sg = str(sig)
     R = "\033[0m"
     indent = style["indent_size"]
     LD = doc.expandtabs(indent).split("\n")
     COLORS = {"cT": cT, "cs": cs, "cn": cn, "ct": ct, "cb": cb, "cc": cc}
+
+    sig_lines = textwrap.wrap(sg, width=warp_width, break_long_words=False, break_on_hyphens=False) or [sg]
 
     style_lookup, style_headers, style_color_d = style_doc_helper(style)
     if headers is None:
@@ -1877,11 +1880,21 @@ def pretty_doc(
         else:
             data[mode].append(d)
 
-    total_rows = 3
+    total_rows = 2 +  + len(sig_lines)
     for m, lines in data.items():
         if m != "Desc":
             total_rows += 1
-        total_rows += len(lines)
+        for j in lines:
+            leading_ws = j[:len(j) - len(j.lstrip(" "))]
+            w = wrapped = textwrap.wrap(
+                j,
+                width=warp_width,
+                initial_indent=leading_ws,
+                subsequent_indent=leading_ws,
+                break_long_words=False,
+                break_on_hyphens=False,
+            ) or [leading_ws]
+            total_rows += len(w)
     CB = cb[0] if isinstance(cb, list) else cb
     if chrome:
         raw_grad = gradient4(Irgb(cT), Irgb(cc), Irgb(cn), Irgb(cs), width, max(2, total_rows), matrix=True)
@@ -1905,8 +1918,20 @@ def pretty_doc(
                 if arg_name in types and types[arg_name]:
                     type_str = f" [{types[arg_name]}]"
                     j = j.replace(f"{arg_name}:", f"{arg_name}{type_str}:", 1)
-            Row += (cbl[cbi % len(cbl)] if isinstance(cbl, list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + j + R + " " * max(0, width - 4 - len(j)) + (cbr[cbi % len(cbr)] if isinstance(cbr, list) else cbr) + " │\n"
-            cbi += 1
+
+            leading_ws = j[:len(j) - len(j.lstrip(" "))]
+            wrapped = textwrap.wrap(
+                j,
+                width=warp_width,
+                initial_indent=leading_ws,
+                subsequent_indent=leading_ws,
+                break_long_words=False,
+                break_on_hyphens=False,
+            ) or [leading_ws]
+
+            for sub in wrapped:
+                Row += (cbl[cbi % len(cbl)] if isinstance(cbl, list) else cbl) + "│ " + cl[min(I, len(cl) - 1)] + sub + R + " " * max(0, warp_width - len(sub)) + (cbr[cbi % len(cbr)] if isinstance(cbr, list) else cbr) + " │\n"
+                cbi += 1
         if Row:
             O.append(Row[:-1])
 
@@ -1915,8 +1940,13 @@ def pretty_doc(
     else:
         out.append(cb + "╭" + "─" * (width - 2) + "╮")
     out.append((cbl[0] if isinstance(cbl, list) else cbl) + "│ " + cT + name + R + " " * (width - 4 - len(name)) + (cbr[0] if isinstance(cbr, list) else cbr) + " │")
-    out.append((cbl[1] if isinstance(cbl, list) else cbl) + "│ " + cc + sg + R + " " * (width - 4 - len(sg)) + (cbr[1] if isinstance(cbr, list) else cbr) + " │")
-    out.append((cbl[2] if isinstance(cbl, list) else cbl) + "│ " + " " * (width - 4) + (cbr[2] if isinstance(cbr, list) else cbr) + " │")
+    row_i = 1
+    for sub in sig_lines:
+        out.append((cbl[row_i % len(cbl)] if isinstance(cbl, list) else cbl) + "│ " + cc + sub + R + " " * max(0, warp_width - len(sub)) + (cbr[row_i % len(cbr)] if isinstance(cbr, list) else cbr) + " │")
+        row_i += 1
+    out.append((cbl[row_i % len(cbl)] if isinstance(cbl, list) else cbl) + "│ " + " " * (width - 4) + (cbr[row_i % len(cbr)] if isinstance(cbr, list) else cbr) + " │")
+    row_i += 1
+
     for i in O:
         out.append(i)
     pal = "".join(c + "██\033[0m" for c in [cT, cs, cn, ct, CB, cc])
@@ -2389,6 +2419,29 @@ def main_menu(
     return "\n".join(out)
 
 
+def typed_str(t:str, val:str):
+    t = t.lower()
+    if ":" in t:
+        outer, inner = t.split(":", 1)
+        items = val.split(",") if val else []
+        converted = [typed_str(inner, v) for v in items]
+        if outer == "list":
+            return converted
+        elif outer == "tuple":
+            return tuple(converted)
+        raise ValueError(f"unknown container type '{outer}'")
+    elif t == "int":
+        return int(val)
+    elif t == "str":
+        return val
+    elif t == "float":
+        return float(val)
+    elif t == "bool":
+        return val.lower() in ("true", "1", "yes", "y", "t")
+    elif t == "none":
+        return None
+    raise ValueError(f"unknown type '{t}'")
+
 history = []
 
 def path_resolve(base_path: str, arg: str | None) -> str:
@@ -2412,82 +2465,6 @@ def path_list(path: str):
             print(f"{rgb(120, 220, 255)}{entry}\033[0m/")
         else:
             print(f"{rgb(230, 230, 230)}{entry}\033[0m")
-
-def supports_kitty_graphics() -> bool:
-    term = (os.environ.get("TERM") or "").lower()
-    if "kitty" in term:
-        return True
-    if os.name != "nt":
-        return False
-    return False
-
-
-def ascii_image_preview(path: str, width: int = 80) -> str:
-    from PIL import Image
-
-    img = Image.open(path).convert("L")
-    if img.width <= 0 or img.height <= 0:
-        return ""
-
-    max_width = max(20, min(width, img.width))
-    scale = max_width / img.width
-    new_height = max(1, int(img.height * scale * 0.45))
-    img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
-
-    chars = " .:-=+*#%@"
-    lines = []
-    for y in range(img.height):
-        row = []
-        for x in range(img.width):
-            lum = img.getpixel((x, y))
-            idx = max(0, min(len(chars) - 1, lum * (len(chars) - 1) // 255))
-            row.append(chars[idx])
-        lines.append("".join(row))
-    return "\n".join(lines) + "\n"
-
-
-def render_image_preview(path: str):
-    from PIL import Image
-
-    image = Image.open(path).convert("RGBA")
-    if not supports_kitty_graphics():
-        return ascii_image_preview(path)
-
-    try:
-        from displays import k_img as display_k_img
-        return display_k_img(image, 1, 1)
-    except Exception:
-        return ascii_image_preview(path)
-
-
-def view_file(path: str):
-    if not os.path.exists(path):
-        print(f"{rgb(255, 100, 100)}File not found: {path}\033[0m")
-        return
-    if os.path.isdir(path):
-        path_list(path)
-        return
-    lower_name = os.path.basename(path).lower()
-    if lower_name.endswith((".png", ".jpg", ".jpeg", ".jfif", ".gif", ".bmp", ".webp")):
-        try:
-            rendered = render_image_preview(path)
-            sys.stdout.write(rendered)
-            sys.stdout.flush()
-        except Exception as exc:
-            print(f"{rgb(255, 100, 100)}Image preview failed: {exc}\033[0m")
-        return
-    if lower_name.endswith(".md") or "readme" in lower_name:
-        try:
-            print("\n".join(terminal.mdGlow(path)))
-        except Exception as exc:
-            print(f"{rgb(255, 100, 100)}Markdown preview failed: {exc}\033[0m")
-        return
-    try:
-        with open(path, "r", encoding="utf-8", errors="replace") as file:
-            print(file.read())
-    except Exception as exc:
-        print(f"{rgb(255, 100, 100)}Could not read file: {exc}\033[0m")
-
 
 def doc_cmd(
         width: int = W,                    # colors:
@@ -2566,13 +2543,31 @@ def doc_cmd(
                 path_list(target)
             else:
                 print(f"{rgb(255, 100, 100)}Not a directory: {target}\033[0m")
-        elif current_view.startswith((".view", ".open")):
+        elif current_view.startswith((".view", ".open", ".v")):
             cvl = current_view.split()
             if len(cvl) == 1:
-                print(f"{rgb(255, 100, 100)}Usage: .view <file>\033[0m")
+                print(f"{rgb(255, 100, 100)}Usage: .view <file> [kitty|sixel|ascii|gray]\033[0m")
             else:
-                target = path_resolve(cwd, " ".join(cvl[1:]))
-                view_file(target)
+                proto_map = {"kitty": "k", "sixel": "s", "ascii": "a", "gray": "g", "grey": "g","k":"k","s":"s","a":"a","g":"g"}
+                proto = "k"
+                rest = cvl[1:]
+                if rest[-1].lower() in proto_map:
+                    proto = proto_map[rest.pop().lower()]
+
+                if not rest:
+                    print(f"{rgb(255, 100, 100)}Usage: .view <file> [kitty|sixel|ascii|gray]\033[0m")
+                else:
+                    fname = " ".join(rest)
+                    if "." not in os.path.basename(fname):
+                        fname += ".jpg"
+                    target = path_resolve(cwd, fname)
+
+                    if not os.path.isfile(target):
+                        print(f"{rgb(255, 100, 100)}File not found: {target}\033[0m")
+                    elif target.lower().endswith((".md", ".markdown")):
+                        print("\n".join(terminal.mdGlow(target)))
+                    else:
+                        loadFile(target, width, 1, 1, proto)
         elif current_view in [".h",".help",".?"]:
             # todo: sort, sr
             COMMANDS = [
@@ -2633,6 +2628,21 @@ def doc_cmd(
             if history and history[-1]: current_view = history[-1]
             else: current_view = ".menu"
             continue
+        elif current_view.startswith(".call"):
+            cvl = current_view.split(" ")
+            func = _resolve_func_name(cvl[1])
+            func = globals().get(func) if func else None
+            if not callable(func):
+                print(f"{rgb(255, 100, 100)} no valid func found named: '{cvl[1]}'\033[0m\n")
+            else:
+                pairs = cvl[2:]
+                try:
+                    args = [typed_str(pairs[i], pairs[i + 1]) for i in range(0, len(pairs) - 1, 2)]
+                    result = func(*args)
+                    if result is not None:
+                        print(f"{rgb(100, 255, 255)}[Return Value]:\033[0m {repr(result)}")
+                except Exception as e:
+                    print(f"{rgb(255, 100, 100)} error calling '{func_name}': {e}\033[0m")
         elif current_view.startswith((".run", ".example", ".r", ".copy", ".c")):
             cvl = current_view.split(" ")
             if not history or (history[-1].startswith('.') and not history[-1].startswith((".my", ".mx")) and not len(cvl) == 2):
