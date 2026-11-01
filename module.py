@@ -144,6 +144,7 @@ Debug = False
 BLOCKS = [" ", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
 I_BLOCKS = [" ", "▔", "🮂", "🮃", "▀", "🮄", "🮅", "🮆", "█"]
 W, H = shutil.get_terminal_size()
+H -= 1
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 
@@ -3726,6 +3727,23 @@ def rinpDemo():
     print(get_word(1,1,3))
     input()
 
+def wrapDemo():
+    banner = [
+        '██╗  ██╗███████╗██╗     ██╗      ██████╗     ██╗    ██╗ ██████╗ ██████╗ ██╗     ██████╗ ',
+        '██║  ██║██╔════╝██║     ██║     ██╔═══██╗    ██║    ██║██╔═══██╗██╔══██╗██║     ██╔══██╗',
+        '███████║█████╗  ██║     ██║     ██║   ██║    ██║ █╗ ██║██║   ██║██████╔╝██║     ██║  ██║',
+        '██╔══██║██╔══╝  ██║     ██║     ██║   ██║    ██║███╗██║██║   ██║██╔══██╗██║     ██║  ██║',
+        '██║  ██║███████╗███████╗███████╗╚██████╔╝    ╚███╔███╔╝╚██████╔╝██║  ██║███████╗██████╔╝',
+        '╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝ ╚═════╝      ╚══╝╚══╝  ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═════╝ ']
+    lines = banner
+    w = max(len(line) for line in lines)
+    h = len(lines)
+
+    g = gradient4((255, 0, 140),(70, 0, 255),(0, 255, 220),(255, 230, 0),w,h,matrix=True)
+    for y, line in enumerate(lines):
+        ansi_colors = [rgb(int(r), int(g_), int(b))for r, g_, b in g[y]]
+        print(wrap(ansi_colors, line))
+
 def aimGameDemo():
     if sys.stdin.fileno() is None or not sys.stdin.isatty():
         return
@@ -4027,7 +4045,7 @@ def videoDemo():
     except KeyboardInterrupt:
         print("\nStopping...")
 
-def slideshowDemo(folder="./wallpapers",t=3):
+def slideshowDemo(folder="./wallpapers",t=1):
     i = 1
     while True:
         img = os.path.join(folder, f"{i}.jpg")
@@ -4044,13 +4062,16 @@ def slideshowDemo(folder="./wallpapers",t=3):
         else:
             # loop
             i = 1
+            break
 
 def btopPy():
     """A python btop4win clone
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
     tbg = True
+    global gtime
+    gtime = 0
     global TI, themes, theme, p, useFavorites, favorites, TIF, cava_bins, Windows
-    Windows = ["²mem","³net","⁴proc"] #["¹cpu","²mem","³net","⁴proc","cava"]
+    Windows = ["¹cpu","²mem","³net","⁴proc","cava"] #["¹cpu","²mem","³net","⁴proc","cava"]
     cava_bins = [0] * (W - 3)
     threading.Thread(target=audio_listener, daemon=True).start()
     warnings.filterwarnings("ignore")
@@ -4074,7 +4095,7 @@ def btopPy():
     
     padding_len = max(1, W - 12)
     global ms
-    ms = 1000
+    ms = 100
     cpuName, GHz = get_cpu_info()
     IC = get_per_core_load()
     update_load_history(get_cpu_load())
@@ -4139,9 +4160,14 @@ def btopPy():
     lastUpdate = time.time()
     cpu_width = 100
     global graph_w, graph_h, cpu_cache, D
-    graph_w, graph_h = 90, 10
+    graph_w, graph_h = 130, 10
     cpu_cache = collections.deque(maxlen=max(200, graph_w))
     D = []
+    matrix_x, matrix_y = 100, 13
+    matrix_w, matrix_h = 34, 20
+    matrix_chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz@#$%&*+-=<>"
+    matrix_drops = [random.randint(-matrix_h, matrix_h) for _ in range(matrix_w)]
+    matrix_lengths = [random.randint(4, 12) for _ in range(matrix_w)]
     def types():
         global D
         while True:
@@ -4175,36 +4201,37 @@ def btopPy():
                 
                 
                 if "cava" in Windows:
-                    sy = csy - 10
-                    cava_graph(csy, csx ,ch , p["proc_misc"], cava_bins[0:cw])
-                elif "²mem" in Windows:
+                    sy = csy - 100
+                    cava_graph(csy + 12, csx ,ch + 3 , p["proc_misc"], cava_bins[0:cw])
+                    place(99, 23, bd("V", H - 24, p["cpu_box"]), CLS=False)
+                if "²mem" in Windows:
                     sy = 13 if "¹cpu" in Windows else 2 
                     M = get_memory()
                     Disks = get_disks()
                     for i, j in enumerate(["total","used","avail","cache","commi"]):
-                        place(csx, sy + 1 + i, f"{j[0].upper() + j[1:]}:{' ' * (11 - len(j))}{M[j]:>10}")
-                    place(csx, sy + 7, f"Page files: {M['page_total']:>10}")
-                    place(csx, sy + 8, f"Used:       {M['page_used']:>10}")
+                        place(csx, sy + 1 + i, f"{j[0].upper() + j[1:]}:{' ' * (11 - len(j))}{M[j]:>10}",CLS=False)
+                    place(csx, sy + 7, f"Page files: {M['page_total']:>10}",CLS=False)
+                    place(csx, sy + 8, f"Used:       {M['page_used']:>10}",CLS=False)
                     disk_x = min(cw - 4, W - 3) // 2
-                    place(disk_x, sy + 1, "Letter-Total-used-avail-HDD/SDD", save=True)
+                    place(disk_x, sy + 1, "Letter-Total-used-avail-HDD/SDD", save=True,CLS=False)
                     for i, disk in enumerate(Disks):
                         y_offset = i * 2
-                        place(disk_x, sy + 2 + y_offset, f'{(disk["name"]+":"):<3}|{disk["total"]:<10}|{disk["used"]:<10}|{disk["io_percent"]}')
-                        place(disk_x, sy + 3 + y_offset, f'   |{disk["free"]:<10}|{D[i] if len(D) > i else "loading..."}')
+                        place(disk_x, sy + 2 + y_offset, f'{(disk["name"]+":"):<3}|{disk["total"]:<10}|{disk["used"]:<10}|{disk["io_percent"]}',CLS=False)
+                        place(disk_x, sy + 3 + y_offset, f'   |{disk["free"]:<10}|{(D[i] + " " * 10) if len(D) > i else "loading..."}',CLS=False)
                     if sy == 2:
                         cava_graph(csy + 3, csx, ch - 11, p["proc_misc"], cava_bins[0:cw])
                 if "cava" in Windows or "²mem" in Windows:
                     sy = 13 if "¹cpu" in Windows else 2
                     place(1, 2, bd("V", H - 3, p["cpu_box"]), CLS=False)
-                    place(1, sy, bd(["TL","TR","BR","BL","TL"], [min(cw+1, W-3), min(ch, H-2), min(cw+1, W-3), min(ch, H-2)], p["mem_box"]), save=True)
+                    place(1, sy, bd(["TL","TR","BR","BL","TL"], [min(cw+1, W-3), min(ch + 1, H-2), min(cw+1, W-3), min(ch + 1, H-2)], p["mem_box"]), save=True,CLS=False)
                     if "²mem" in Windows:
-                        place(3, sy, f"{p['mem_box']}┐{ft('²mem')}{p['mem_box']}┌{bd('H', min(cw-14, W-3)//2, p['mem_box'])}{p['mem_box']}┬─┐Disks{bd(['TL','TR'], min(cw-15, W-3)//2, p['mem_box'])}")
+                        place(3, sy, f"{p['mem_box']}┐{ft('²mem')}{p['mem_box']}┌{bd('H', min(cw-14, W-3)//2, p['mem_box'])}{p['mem_box']}┬─┐Disks{bd(['TL','TR'], min(cw-15, W-3)//2, p['mem_box'])}",CLS=False)
                     else:
-                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-6, W-3), p['mem_box'])}")
+                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-6, W-3), p['mem_box'])}",CLS=False)
                     if "²mem" in Windows and sy == 2:
                         sy = csy - 9
-                        place(1,sy,bd(["TL","TR"],2,p['mem_box']))
-                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-6, W-3), p['mem_box'])}")
+                        place(1,sy,bd(["TL","TR"],2,p['mem_box']),CLS=False)
+                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-6, W-3), p['mem_box'])}",CLS=False)
                 place(0,0,
                     f'{p["main_bg"]}{p["main_fg"]}' +
                     f'{bd(["TL","TR"], CC=p["cpu_box"])}{ft("¹cpu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("menu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("preset *")}' +
@@ -4216,8 +4243,8 @@ def btopPy():
                 clock_tick(int(padding_len/2) + 4, 1, p["title"], False, False, True, False)
                 if time.time() - lastUpdate < (ms/1000):
                     if not ["¹cpu"] == Windows:
-                        place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=True)
-                        place(W-3, 1, bd(["TL","TR","BR","BL"], [1,10,W-2], CC=p["cpu_box"]), save=True)
+                        place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=True,CLS=False)
+                        place(W-3, 1, bd(["TL","TR","BR","BL"], [1,10,W-2], CC=p["cpu_box"]), save=True,CLS=False)
                     #place(1, 13,  bd(["TL","TR"], W-3, p["cpu_box"]), save=True)
                     print("\n"*(H-2))
                     return None
@@ -4258,6 +4285,37 @@ def btopPy():
                     place(W-3, 3, bd(["TL","TR","BR","BL","TL","TR"], [0,6,33,6,1], p["cpu_box"]), save=False)
                     place(W-3, 1, bd(["TL","TR","BR","BL"], [1,H-3,W-2], CC=p["cpu_box"]), save=False)
                     print()
+                matrix_palette = [p["cpu_start"],p["cpu_mid"],p["cpu_end"]]
+
+                blank = f'{p["main_bg"]}{p["main_fg"]}  '
+                frame = []
+
+                for y in range(matrix_h):
+                    line = [c.setPos(matrix_x, matrix_y + y)]
+                    for x in range(matrix_w):
+                        head = matrix_drops[x]
+                        distance = head - y
+                        if 0 <= distance < matrix_lengths[x]:
+                            char = random.choice(matrix_chars)
+                            if distance == 0:
+                                color = p["hi_fg"]
+                            else:
+                                shade = min(2,(distance * 3) // matrix_lengths[x])
+                                color = matrix_palette[shade]
+                            line.append(f'{p["main_bg"]}{color}{char} ')
+                        else:
+                            line.append(blank)
+
+                    line.append(p["r"])
+                    frame.append("".join(line))
+                sys.stdout.write("".join(frame))
+                sys.stdout.flush()
+
+                for x in range(matrix_w):
+                    matrix_drops[x] += 1
+                    if matrix_drops[x] - matrix_lengths[x] >= matrix_h:
+                        matrix_drops[x] = random.randint(-matrix_h, -1)
+                        matrix_lengths[x] = random.randint(4, 12)
             
             response = finput(max_length=1, vis=False, tick_func=update, inputs=["keyboard", "mouse", "ESC", "arrows", "controller"])
             if "ESC" in response:
@@ -4435,20 +4493,6 @@ def cavaDemo():
         cava_graph(H,1,H)
         time.sleep(0.05)
 
-try:
-    import flipper
-except ModuleNotFoundError:
-    flipper = None
-
-def main():
-    if flipper is None:
-        print("Flipper support is unavailable in this environment.")
-        return
-    flipper.start()
-    if flipper.port:
-        flipper.cli(flipper.port)
-    else:
-        print("no port")
 
 def themeselect(themes = theme.ls()):
     i = 0
@@ -4645,7 +4689,7 @@ def voidDemo():
             key = finput()
 
 
-def gradientDemo():
+def gradientDemo(durration=10):
     w, h = 30, 30
     t = 0
 
@@ -4677,6 +4721,10 @@ def gradientDemo():
 
         t += 0.05
         time.sleep(0.03)
+        if t > durration:
+            print(f"[done]                   ")
+            break
+        print(f"[{t}]" + " " * 10)
 
 
 
@@ -4687,14 +4735,86 @@ rlock = threading.Lock()
 
 #clear()
 #slideshowDemo(t=0.1)
+btopPy()
 if __name__ == "__main__":
     clear()
-    #playFile("bg_music")
-    #btopPy()
-    #sixtelDemo()
-    #themeselect()
-    #main()
-    #slideshowDemo()
     doc_cmd()
-    #cavaDemo()
+    clear()
+    #tableDemo()
+    #input()
+    #clear()
+    #Demo256()
+    
+    #input()
+    #clear()
+    
+    themeselect()
+    
     input()
+    clear()
+    
+    canvasDemo()
+    
+    input()
+    clear()
+        
+    randDemo()
+
+    input()
+    clear()
+
+    gradientDemo()
+
+    input()
+    clear()
+        
+    wrapDemo()
+    
+    input()
+    clear()
+            
+    clickDemo()
+        
+    input()
+    clear()    
+
+    arrowsDemo()
+    
+    input()
+    clear()    
+
+    controllerDemo()
+    
+    input()
+    clear()    
+
+    #aimGameDemo() no work :(
+
+    rhythmGame()
+        
+    input()
+    clear()        
+
+    slideshowDemo()
+        
+    input()
+    clear()
+    print(c.setPos(0,0))
+    print(" " * W * H)
+    clear()
+
+    #videoDemo()
+        
+    #input()
+    #clear()
+        
+    #cavaDemo() no work :(
+
+    doc_cmd()
+    
+    input()
+    clear()    
+
+    load_bar(duration=10)        
+
+    btopPy()

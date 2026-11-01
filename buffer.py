@@ -1,1 +1,0 @@
-# Win32 ctypes: get_char_at, get_word, get_cursor_position

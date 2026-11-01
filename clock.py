@@ -298,4 +298,7 @@ def BIG_CLOCK(
         sys.stdout.flush()
 
 if __name__ == "__main__":
+    try:
+        print(f"\033]0;clock\007\033]9;9;\"clock\"\007")
+    except: pass
     BIG_CLOCK()

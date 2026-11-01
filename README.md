@@ -2,6 +2,8 @@
 a python module focused on creating better gui within the terminal
 is cross terminal! 
 
+yt demo: https://www.youtube.com/watch?v=CNtCzBxj1EU 
+
 Features
 ---
 - rgb colors
@@ -22,12 +24,20 @@ Example
 
 >>> from ansi import *
 
+BUILT for WINDOWS
 
-
-
-stuf for nerds:
-nt - terminal type (windows)
-
+## how to install:
+(just watch the yt vid)
+(windows only)
+1. install python if you dont have it already
+2. download the zip
+3. extract the zip
+4. run `py -m venv .venv`
+5. run `.venv\Scripts\Activate.ps1`
+6. run `python -m pip install --upgrade pip`
+7. run pip `install -r requirements.txt`
+8. now you can run `python file.py` replacing file.py with one of the python files. 
+9. for ex run `python main.py`
 
 credits:
 

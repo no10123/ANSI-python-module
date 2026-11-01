@@ -384,7 +384,7 @@ def ascii_image_preview(path: str, width: int = 80, use_color: bool = True) -> s
 
     return "\n".join(lines) + "\n"
 
-import os  # <-- was missing entirely
+import os
 
 def loadFile(path, mw=None, sx=1, sy=1, p="k"):
     """

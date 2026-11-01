@@ -162,4 +162,8 @@ def donutDemo():
         if HOLO:
             chars = chars[1:] + chars[:1]
 
-donutDemo()
+if __name__ == "__main__":
+    donutDemo()
+    try:
+        print(f"\033]0;donut\007\033]9;9;\"donut\"\007")
+    except: pass

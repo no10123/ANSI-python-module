@@ -27,6 +27,7 @@ def find_flipper():
     return None
 
 def start():
+    global port
     port = find_flipper()
     if port:
         print(f"\n- success - target Flipper found on: {port}")
@@ -140,3 +141,15 @@ def seeRaw():
     
         print("\n--- raw (2/2) ---")
         print(storage_data)
+
+
+
+def main():
+    start()
+    if port:
+        cli(port)
+    else:
+        print("no port")
+
+if __name__ == "__main__":
+    main()

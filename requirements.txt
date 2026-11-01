@@ -1,0 +1,13 @@
+inputs
+hidapi
+pyperclip
+pyserial
+pygame-ce
+yt-dlp
+SoundCard
+numpy
+Pillow
+opencv-python
+mss
+PyGetWindow
+pywin32
