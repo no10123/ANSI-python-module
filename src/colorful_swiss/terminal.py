@@ -169,7 +169,7 @@ mlb = {k:False for k, _ in STYLEm.items()}
 
 usingThemes = True
 if usingThemes:
-    import themeParser as t
+    import colorful_swiss.themeParser as t
     Theme = t.ThemeEngine()
     TL = Theme.get_available_themes()
 

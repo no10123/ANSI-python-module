@@ -28,9 +28,11 @@ class mediaControl:
             self.seek_frame = n
 
 control = mediaControl()
-
-pygame.init()
-pygame.mixer.init()
+try:
+    pygame.init()
+    pygame.mixer.init()
+except:
+    pass
 def playFile(path:str):
     if not pygame.mixer.get_init():
         pygame.mixer.init()

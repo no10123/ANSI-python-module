@@ -11,3 +11,4 @@ opencv-python
 mss
 PyGetWindow
 pywin32
+psutil

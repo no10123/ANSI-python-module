@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "colorful-swiss"
+version = "0.1.1"
+description = "Windows-first toolkit for building colorful, interactive terminal UIs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "no10123" }]
+keywords = ["tui", "ansi", "terminal", "windows", "cli"]
+
+classifiers = [
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Environment :: Console",
+    "Topic :: Software Development :: User Interfaces",
+]
+
+dependencies = [
+    "inputs",
+    "hidapi",
+    "pyperclip",
+    "pyserial",
+    "pygame-ce",
+    "yt-dlp",
+    "SoundCard",
+    "numpy",
+    "Pillow",
+    "opencv-python",
+    "mss",
+    "PyGetWindow",
+    "psutil",
+    "pywin32; sys_platform == 'win32'",
+]
+
+[project.urls]
+Repository = "https://github.com/no10123/ANSI-python-module"
+
+[project.scripts]
+colorful-swiss = "colorful_swiss.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/colorful_swiss"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]

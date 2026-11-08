@@ -1,5 +1,7 @@
 import os
 import re
+from pathlib import Path
+THEMES_DIR = Path(__file__).parent / "themes"
 
 def HEXtoRGB(hex:str) -> tuple[int,int,int]:
     """
@@ -21,8 +23,9 @@ def HEXtoRGB(hex:str) -> tuple[int,int,int]:
 
 
 class ThemeEngine:
-    def __init__(self, theme_folder="themes"):
-        self.theme_folder = theme_folder
+    def __init__(self, theme_folder=THEMES_DIR):
+        self.theme_folder = str(theme_folder)
+        self.tbg = False
         self.colors = {}
         self.RESET = "\033[0m"
 
@@ -38,11 +41,9 @@ class ThemeEngine:
         return f"\033[{layer};2;{r};{g};{b}m"
 
     def get_available_themes(self):
-        """returns all .theme's in themes folder"""
-        if not os.path.exists(self.theme_folder):
-            os.makedirs(self.theme_folder)
+        if not os.path.isdir(self.theme_folder):
             return []
-        return [f.replace('.theme', '') for f in os.listdir(self.theme_folder) if f.endswith('.theme')]
+        return [f[:-6] for f in os.listdir(self.theme_folder) if f.endswith('.theme')]
 
     def load_theme(self, theme_name, tbg=False,RGB=False):
         """creates a dict w/ colors in .theme"""
@@ -106,10 +107,7 @@ class ThemeEngine:
         return {k: self.get(k) for k in keys}
     
     def ls(self):
-        if not os.path.exists("themes"):
-            return []
-
-        return [f[:-6] for f in os.listdir("themes") if f.endswith(".theme")]
+        return self.get_available_themes()
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 

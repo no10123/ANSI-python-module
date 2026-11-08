@@ -13,8 +13,8 @@ import shutil
 import ctypes
 if os.name == 'nt': from ctypes import wintypes
 import colorsys
-from DataFetcher import *
-from themeParser import *
+from .DataFetcher import *
+from .themeParser import *
 import collections
 import math
 import pygame
@@ -33,10 +33,10 @@ import win32gui
 import win32ui
 import win32api
 import win32con
-from spotlight import *
+from .spotlight import *
 import ctypes
 from ctypes import wintypes, windll
-from displays import *
+from .displays import *
 import colorsys
 from math import cos, sin
 if os.name == 'nt': import msvcrt
@@ -47,10 +47,11 @@ from typing import TypedDict, Literal, Union, Callable, Any
 import ast
 import subprocess
 import difflib
-import terminal
+from . import terminal
 import builtins
 import ast
 import shlex
+import psutil
 
 class RawTerminal():
     
@@ -3630,8 +3631,11 @@ class createQuiz():
 #quit()
 
 def reset_audio():
-    pygame.mixer.quit()
-    pygame.mixer.init()
+    try:
+        pygame.mixer.quit()
+        pygame.mixer.init()
+    except:
+        pass
 C = Canvas()
 
 #widgets (basically demos)
@@ -3966,7 +3970,7 @@ def arrowsDemo():
     sys.stdout.write(CLEAR_SCREEN)
     sys.stdout.flush()
     print("Arrow Key Demo: Press arrow keys on your keyboard.")
-    print("Middle click to exit\n" + cursor().vis())
+    print("TAB to exit\n" + cursor().vis())
 
     with RawTerminal():
         while True:
@@ -4064,9 +4068,23 @@ def slideshowDemo(folder="./wallpapers",t=1):
             i = 1
             break
 
+BMW, BMH = 170, 40 # min width and hight.
+
 def btopPy():
     """A python btop4win clone
     nums: ⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹"""
+    tw, th = shutil.get_terminal_size()
+    th -= 1
+    if tw < BMW or th < BMH:
+        print(
+            f"{rgb(255,180,0)}Warning:{color()} this demo is laid out for a "
+            f"{BMW}x{BMH} terminal and yours is {tw}x{th}.\n"
+            "It may look broken. Try fullscreen or a smaller font (Ctrl+scroll; not in VS Code).\n"
+            "Press Esc inside the demo to quit.\n"
+        )
+        if input("Press Enter to continue anyway, or q then Enter to cancel: ").strip().lower() == "q":
+            return
+    W, H = min(tw, BMW), min(th, BMH)
     tbg = True
     global gtime
     gtime = 0
@@ -4446,7 +4464,7 @@ def audio_listener():
                 fft_data = np.abs(np.fft.rfft(windowed_data))
                 fft_data = fft_data[:len(fft_data)//2]
                 bins = np.array_split(fft_data, len(cava_bins))
-                new_volumes = [np.mean(b) * 1.5 for b in bins]
+                new_volumes = [float(np.mean(b)) * 1.5 if len(b) else 0.0 for b in bins]
                 
                 # smoothing
                 for i in range(len(cava_bins)):
@@ -4462,7 +4480,10 @@ def cava_graph(bottom_row, start_col, max_height, color=color("default"), bins=c
     frame_buffer = "\033[H" 
     
     for col_index, volume in enumerate(bins):
-        val = min(max(float(volume), 0.0), float(max_height))
+        val = float(volume)
+        if not math.isfinite(val):
+            val = 0.0
+        val = min(max(val, 0.0), float(max_height))
 
         # 9.8 -> (9, 0.8)
         full_blocks = int(val)
@@ -4735,86 +4756,5 @@ rlock = threading.Lock()
 
 #clear()
 #slideshowDemo(t=0.1)
-btopPy()
 if __name__ == "__main__":
-    clear()
-    doc_cmd()
-    clear()
-    #tableDemo()
-    #input()
-    #clear()
-    #Demo256()
-    
-    #input()
-    #clear()
-    
-    themeselect()
-    
-    input()
-    clear()
-    
-    canvasDemo()
-    
-    input()
-    clear()
-        
-    randDemo()
-
-    input()
-    clear()
-
-    gradientDemo()
-
-    input()
-    clear()
-        
-    wrapDemo()
-    
-    input()
-    clear()
-            
-    clickDemo()
-        
-    input()
-    clear()    
-
-    arrowsDemo()
-    
-    input()
-    clear()    
-
-    controllerDemo()
-    
-    input()
-    clear()    
-
-    #aimGameDemo() no work :(
-
-    rhythmGame()
-        
-    input()
-    clear()        
-
-    slideshowDemo()
-        
-    input()
-    clear()
-    print(c.setPos(0,0))
-    print(" " * W * H)
-    clear()
-
-    #videoDemo()
-        
-    #input()
-    #clear()
-        
-    #cavaDemo() no work :(
-
-    doc_cmd()
-    
-    input()
-    clear()    
-
-    load_bar(duration=10)        
-
     btopPy()
