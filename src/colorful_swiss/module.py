@@ -4084,6 +4084,8 @@ def btopPy():
         )
         if input("Press Enter to continue anyway, or q then Enter to cancel: ").strip().lower() == "q":
             return
+    print(c.invis())
+    global W, H
     W, H = min(tw, BMW), min(th, BMH)
     tbg = True
     global gtime
@@ -4182,7 +4184,7 @@ def btopPy():
     cpu_cache = collections.deque(maxlen=max(200, graph_w))
     D = []
     matrix_x, matrix_y = 100, 13
-    matrix_w, matrix_h = 34, 20
+    matrix_w, matrix_h = 34, 26
     matrix_chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz@#$%&*+-=<>"
     matrix_drops = [random.randint(-matrix_h, matrix_h) for _ in range(matrix_w)]
     matrix_lengths = [random.randint(4, 12) for _ in range(matrix_w)]
@@ -4220,7 +4222,7 @@ def btopPy():
                 
                 if "cava" in Windows:
                     sy = csy - 100
-                    cava_graph(csy + 12, csx ,ch + 3 , p["proc_misc"], cava_bins[0:cw])
+                    cava_graph(csy + 12, csx ,ch - 3 , p["proc_misc"], cava_bins[0:cw])
                     place(99, 23, bd("V", H - 24, p["cpu_box"]), CLS=False)
                 if "²mem" in Windows:
                     sy = 13 if "¹cpu" in Windows else 2 
@@ -4241,20 +4243,20 @@ def btopPy():
                 if "cava" in Windows or "²mem" in Windows:
                     sy = 13 if "¹cpu" in Windows else 2
                     place(1, 2, bd("V", H - 3, p["cpu_box"]), CLS=False)
-                    place(1, sy, bd(["TL","TR","BR","BL","TL"], [min(cw+1, W-3), min(ch + 1, H-2), min(cw+1, W-3), min(ch + 1, H-2)], p["mem_box"]), save=True,CLS=False)
+                    place(1, sy, bd(["TL","TR","BR","BL","TL"], [min(cw, W-4), min(ch + 1, H-2), min(cw+1, W-3), min(ch + 1, H-2)], p["mem_box"]), save=True,CLS=False)
                     if "²mem" in Windows:
-                        place(3, sy, f"{p['mem_box']}┐{ft('²mem')}{p['mem_box']}┌{bd('H', min(cw-14, W-3)//2, p['mem_box'])}{p['mem_box']}┬─┐Disks{bd(['TL','TR'], min(cw-15, W-3)//2, p['mem_box'])}",CLS=False)
+                        place(3, sy, f"{p['mem_box']}┐{ft('²mem')}{p['mem_box']}┌{bd('H', min(cw-15, W-3)//2, p['mem_box'])}{p['mem_box']}┬─┐Disks{bd(['TL','TR'], min(cw-16, W-3)//2, p['mem_box'])}",CLS=False)
                     else:
-                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-6, W-3), p['mem_box'])}",CLS=False)
+                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-11, W-3), p['mem_box'])}",CLS=False)
                     if "²mem" in Windows and sy == 2:
                         sy = csy - 9
                         place(1,sy,bd(["TL","TR"],2,p['mem_box']),CLS=False)
-                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-6, W-3), p['mem_box'])}",CLS=False)
+                        place(3, sy, f"{p['mem_box']}┐{ft('cava')}{bd(['TL','TR'], min(cw-9, W-3), p['mem_box'])}",CLS=False)
                 place(0,0,
                     f'{p["main_bg"]}{p["main_fg"]}' +
                     f'{bd(["TL","TR"], CC=p["cpu_box"])}{ft("¹cpu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("menu")}{bd(["TL","TR"], CC=p["cpu_box"])}{ft("preset *")}' +
                     f'{bd(["TL","TR"], int(padding_len/2) - 24, p["cpu_box"])}{p["title"]}{time.strftime("%H:%M:%S")}{p["main_fg"]}' +
-                    f'{bd(["TL","TR"], int((padding_len-1)/2) - len(str(ms)) - 10, p["cpu_box"])}{p["r"]}'
+                    f'{bd(["TL","TR"], int((padding_len-1)/2) - len(str(ms)) - 11, p["cpu_box"])}{p["r"]}'
                 )
                 
                 place(W-14-(4-len(str(ms))), 1, f'{bd("H", 2 if len(str(ms)) == 3 else 0, p["cpu_box"]) + bd("TR", CC=p["cpu_box"])}{ft("-")}{ft(f" {ms}ms ")}{ft("+")}')
