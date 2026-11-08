@@ -14,7 +14,7 @@ yt demo: https://www.youtube.com/watch?v=CNtCzBxj1EU
 ## How to install:
 1. Install Python (if you don't have it already) from https://www.python.org/downloads/. If you have any trouble installing it, watch this video:  https://www.youtube.com/watch?v=H_4wrR3wWM8 <br> then pick your method of installing and follow the steps; you will only need to do one of the methods. (btw both methods are pretty similar, but I wanted it to be easy to install/use.)
 
--- install via pip/PyPI --
+-- install via pip/PyPI -- <br>
 2. Create a new folder and open it. <br>
 3. Then open this folder in VS Code, or you can open your terminal in this location (for the terminal, you can also open it normally and cd to the folder) <br>
 4. If you opened the folder in VS Code, open a new terminal in it. (If needed, make sure to trust the folder) <br>
