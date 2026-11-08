@@ -3,15 +3,15 @@ A Python module focused on creating more colorful and interactive TUIs within th
 
 ![btopPy dashboard](https://raw.githubusercontent.com/no10123/ANSI-python-module/main/docs/screenshot.png)
 
-easy install:
-
 Requires Windows 10/11 and python version 3.10+, and a fullscreen terminal for best results.
+
+easy install:
 
 ```powershell
 pip install colorful-swiss
 colorful-swiss
 ```
-The second command will open up doc_cmd a interactive docstring viewer. Type a functions name or id to see what it does or .? to see all of the functions / features of this demo. 
+The second command will open up doc_cmd an interactive docstring viewer. Type a functions name or id to see what it does or .? to see all of the functions / features of this demo. 
 
 The main purpose of this project is to be used as a library / tool: 
 
