@@ -1,7 +1,7 @@
 # colorful-swiss
 A Python module focused on creating more colorful and interactive TUIs within the terminal
 
-![alt text](image.png)
+![btopPy dashboard](https://raw.githubusercontent.com/no10123/ANSI-python-module/main/docs/screenshot.png)
 
 easy install:
 
