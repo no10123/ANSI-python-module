@@ -384,9 +384,13 @@ def get_processes(filter_str="", reverse=False, tree=False):
 
 def get_per_core_load():
     """
-    Returns a list of %'s for each core.
+    Returns a list of max, avg, midrange, min for all cores.
     """
-    return psutil.cpu_percent(interval=None, percpu=True)
+    cores = psutil.cpu_percent(interval=None, percpu=True)
+    if isinstance(cores, float): cores = [cores]
+    avg = sum(cores) / len(cores)
+    avg2 = (max(cores) + min(cores)) / 2
+    return [max(cores),avg2,avg,min(cores)]
 
 def get_cpu_info():
     cpu_name = "Unknown"

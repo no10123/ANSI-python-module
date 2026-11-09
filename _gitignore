@@ -3,3 +3,4 @@ __pycache__/
 *.bak
 *.log
 wallpapers/
+src/colorful_swiss/__pycache__/

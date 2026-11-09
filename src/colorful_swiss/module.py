@@ -83,7 +83,7 @@ class RawTerminal():
         self.original_stdout_state = None
         self.fd_in = sys.stdin.fileno() if sys.stdin.isatty() else None
 
-    def __enter__(self) -> self:
+    def __enter__(self):
         if self.fd_in is None:
             print("\033[31m[ERROR]\033[0m this terminal has mouse events disabled.\nplease use a diffrent terminal, to be able to use mouse.")
             return self
@@ -4283,7 +4283,7 @@ def btopPy():
                     sys.stdout.flush()
                     place(W-35,4,f"CPU {generate_cpu_bar(cpul,24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(cpul):>3}%",save=True)
                     for i in range(len(IC)):
-                        place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(IC[i]):>3}%",save=True)
+                        place(W-35,5+i,f"Q{i}  {generate_cpu_bar(IC[i],24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(IC[i]):>3}%",save=True)
                     place(W-35,5+len(IC),f"Load AVG: {GLA[0]:>4.2f}  {GLA[1]:>4.2f}  {GLA[2]:>4.2f}")
                 
                     # Draw boxes
@@ -4298,7 +4298,7 @@ def btopPy():
                     sys.stdout.flush()
                     place(W-35,4,f"CPU {generate_cpu_bar(cpul,24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(cpul):>3}%",save=True)
                     for i in range(len(IC)):
-                        place(W-35,5+i,f"C{i}  {generate_cpu_bar(IC[i],24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(IC[i]):>3}%",save=True)
+                        place(W-35,5+i,f"Q{i}  {generate_cpu_bar(IC[i],24,[p['cpu_start'],p['cpu_mid'],p['cpu_end']])} {int(IC[i]):>3}%",save=True)
                     place(W-35,5+len(IC),f"Load AVG: {GLA[0]:>4.2f}  {GLA[1]:>4.2f}  {GLA[2]:>4.2f}")
                 
                     # Draw boxes

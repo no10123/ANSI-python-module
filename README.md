@@ -65,7 +65,7 @@ finput - reads incoming input bytes and adds custom functions, and uses SGR for 
 
 doc_cmd - uses AST for many things and reads the docstring attribute of functions, and uses globals to find said functions.
 
-why btop clone - mainly cause it does good job of showing off every tool in one demo, and looks cool, since I mainly wanted it to look cool I dropped the proc area and network graph and replaced it with a python remake of cava I did and a Matrix rain effect.
+why btop clone - mainly cause it does good job of showing off every tool in one demo, and looks cool, since I mainly wanted it to look cool I dropped the proc area and network graph and replaced it with a python remake of cava I did and a Matrix rain effect. I also switched from showing all cores to Q0 for max, Q1 for median range, Q2 for average, and Q4 for min. 
  
 ## Why is it Windows only
  
