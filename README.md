@@ -2,8 +2,10 @@
 A Python module focused on creating more colorful and interactive TUIs within the terminal
 
 ![btopPy dashboard](https://raw.githubusercontent.com/no10123/ANSI-python-module/main/docs/screenshot.png)
+Check out a demonstration of all the demos here:https://www.youtube.com/watch?v=CNtCzBxj1EU&t=11s 
 
-Requires Windows 10/11 and python version 3.10+, and a fullscreen terminal for best results.
+
+Requires Windows 10/11 and Python version 3.10+, and a fullscreen terminal for best results.
 
 easy install:
 
