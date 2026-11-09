@@ -4227,7 +4227,7 @@ def btopPy():
                 if "²mem" in Windows:
                     sy = 13 if "¹cpu" in Windows else 2 
                     M = get_memory()
-                    Disks = get_disks()
+                    Disks = get_disks()[:6] # why in the world would you have more than 6 drives, less than 4% of people have 6+ drives
                     for i, j in enumerate(["total","used","avail","cache","commi"]):
                         place(csx, sy + 1 + i, f"{j[0].upper() + j[1:]}:{' ' * (11 - len(j))}{M[j]:>10}",CLS=False)
                     place(csx, sy + 7, f"Page files: {M['page_total']:>10}",CLS=False)
