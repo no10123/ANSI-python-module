@@ -5,4 +5,4 @@ if sys.platform != "win32":
  
 from .module import *
  
-__version__ = "0.1.1"
+__version__ = "0.1.2"

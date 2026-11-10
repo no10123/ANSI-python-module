@@ -4227,17 +4227,19 @@ def btopPy():
                 if "²mem" in Windows:
                     sy = 13 if "¹cpu" in Windows else 2 
                     M = get_memory()
-                    Disks = get_disks()[:6] # why in the world would you have more than 6 drives, less than 4% of people have 6+ drives
+                    Disks = get_disks()
                     for i, j in enumerate(["total","used","avail","cache","commi"]):
                         place(csx, sy + 1 + i, f"{j[0].upper() + j[1:]}:{' ' * (11 - len(j))}{M[j]:>10}",CLS=False)
                     place(csx, sy + 7, f"Page files: {M['page_total']:>10}",CLS=False)
                     place(csx, sy + 8, f"Used:       {M['page_used']:>10}",CLS=False)
                     disk_x = min(cw - 4, W - 3) // 2
                     place(disk_x, sy + 1, "Letter-Total-used-avail-HDD/SDD", save=True,CLS=False)
-                    for i, disk in enumerate(Disks):
+                    for i, disk in enumerate(Disks[:6]):
                         y_offset = i * 2
                         place(disk_x, sy + 2 + y_offset, f'{(disk["name"]+":"):<3}|{disk["total"]:<10}|{disk["used"]:<10}|{disk["io_percent"]}',CLS=False)
                         place(disk_x, sy + 3 + y_offset, f'   |{disk["free"]:<10}|{(D[i] + " " * 10) if len(D) > i else "loading..."}',CLS=False)
+                    if len(Disks) > 6:
+                        place(disk_x, sy + 14, "[+] Extra Disks not shown")
                     if sy == 2:
                         cava_graph(csy + 3, csx, ch - 11, p["proc_misc"], cava_bins[0:cw])
                 if "cava" in Windows or "²mem" in Windows:
