@@ -2,18 +2,16 @@
 A Python module focused on creating more colorful and interactive TUIs within the terminal
 
 ![btopPy dashboard](https://raw.githubusercontent.com/no10123/ANSI-python-module/main/docs/screenshot.png)
-Check out a demonstration of all the demos here:https://www.youtube.com/watch?v=CNtCzBxj1EU&t=11s 
-
 
 Requires Windows 10/11 and Python version 3.10+, and a fullscreen terminal for best results.
 
 easy install:
 
 ```powershell
-pip install colorful-swiss
-colorful-swiss
+python -m pip install colorful-swiss
+python -m colorful_swiss
 ```
-The second command will open up doc_cmd an interactive docstring viewer. Type a functions name or id to see what it does or .? to see all of the functions / features of this demo. 
+The second command will open up doc_cmd, an interactive docstring viewer. Type a function's name or id to see what it does or .? to see all of the functions / features of this demo. 
 
 The main purpose of this project is to be used as a library / tool: 
 
@@ -67,7 +65,7 @@ finput - reads incoming input bytes and adds custom functions, and uses SGR for 
 
 doc_cmd - uses AST for many things and reads the docstring attribute of functions, and uses globals to find said functions.
 
-why btop clone - mainly cause it does good job of showing off every tool in one demo, and looks cool, since I mainly wanted it to look cool I dropped the proc area and network graph and replaced it with a python remake of cava I did and a Matrix rain effect. I also switched from showing all cores to Q0 for max, Q1 for median range, Q2 for average, and Q4 for min. 
+why btop clone - mainly cause it does good job of showing off every tool in one demo, and looks cool, since I mainly wanted it to look cool I dropped the proc area and network graph and replaced it with a python remake of cava I did and a Matrix rain effect. The CPU panel shows four stats instead of one bar per core: max, median, average, and min. Also disks are capped at 6 so the panel never overflows.
  
 ## Why is it Windows only
  
@@ -90,6 +88,13 @@ src/colorful_swiss/
 ## Built with
 
 Python, `ctypes` and `pywin32` for the Windows console and hardware APIs, NumPy for the audio FFT, Pillow and OpenCV for image and video rendering, pygame for audio playback, yt-dlp for downloads.
+
+## why colorful-swiss:
+colorful due to the abundance of color based tools. 
+and swiss due to the swiss army nature of the module
+
+## Video (showcases all the demos, optional):
+https://www.youtube.com/watch?v=CNtCzBxj1EU&t=11s 
 
 ## Credits
  
